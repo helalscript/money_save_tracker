@@ -1,0 +1,849 @@
+{
+    "info": {
+        "name": "Rob Barden API v1",
+        "description": "Complete API collection for Rob Barden RFID Access Control System",
+        "version": "1.0.0",
+        "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    },
+    "auth": {
+        "type": "bearer",
+        "bearer": [
+            {
+                "key": "token",
+                "value": "{{jwt_token}}",
+                "type": "string"
+            }
+        ]
+    },
+    "variable": [
+        {
+            "key": "base_url",
+            "value": "https://your-domain.com/api/v1",
+            "type": "string"
+        },
+        {
+            "key": "jwt_token",
+            "value": "",
+            "type": "string"
+        }
+    ],
+    "item": [
+        {
+            "name": "Authentication",
+            "item": [
+                {
+                    "name": "Login",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"user@example.com\",\n    \"password\": \"password123\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/login",
+                            "host": ["{{base_url}}"],
+                            "path": ["login"]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.status && response.token) {",
+                                    "        pm.collectionVariables.set('jwt_token', response.token);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Logout",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/logout",
+                            "host": ["{{base_url}}"],
+                            "path": ["logout"]
+                        }
+                    }
+                },
+                {
+                    "name": "Refresh Token",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/refresh-token",
+                            "host": ["{{base_url}}"],
+                            "path": ["refresh-token"]
+                        }
+                    },
+                    "event": [
+                        {
+                            "listen": "test",
+                            "script": {
+                                "exec": [
+                                    "if (pm.response.code === 200) {",
+                                    "    const response = pm.response.json();",
+                                    "    if (response.status && response.token) {",
+                                    "        pm.collectionVariables.set('jwt_token', response.token);",
+                                    "    }",
+                                    "}"
+                                ]
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Get Current User",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/me",
+                            "host": ["{{base_url}}"],
+                            "path": ["me"]
+                        }
+                    }
+                },
+                {
+                    "name": "Update Profile",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"name\": \"Updated Name\",\n    \"phone\": \"+1234567890\",\n    \"age\": 25,\n    \"gender\": \"male\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/update-profile",
+                            "host": ["{{base_url}}"],
+                            "path": ["update-profile"]
+                        }
+                    }
+                },
+                {
+                    "name": "Change Password",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"current_password\": \"oldpassword\",\n    \"new_password\": \"newpassword\",\n    \"new_password_confirmation\": \"newpassword\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/update-password",
+                            "host": ["{{base_url}}"],
+                            "path": ["update-password"]
+                        }
+                    }
+                },
+                {
+                    "name": "Forgot Password",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"user@example.com\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/forget-password",
+                            "host": ["{{base_url}}"],
+                            "path": ["forget-password"]
+                        }
+                    }
+                },
+                {
+                    "name": "Verify OTP",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"user@example.com\",\n    \"otp\": \"123456\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/verify-otp",
+                            "host": ["{{base_url}}"],
+                            "path": ["verify-otp"]
+                        }
+                    }
+                },
+                {
+                    "name": "Reset Password",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"email\": \"user@example.com\",\n    \"otp\": \"123456\",\n    \"password\": \"newpassword\",\n    \"password_confirmation\": \"newpassword\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/reset-password",
+                            "host": ["{{base_url}}"],
+                            "path": ["reset-password"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "User Endpoints",
+            "item": [
+                {
+                    "name": "Get Customers",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/customers?page=1&per_page=10&search=john",
+                            "host": ["{{base_url}}"],
+                            "path": ["customers"],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "per_page",
+                                    "value": "10"
+                                },
+                                {
+                                    "key": "search",
+                                    "value": "john"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Create Customer",
+                    "request": {
+                        "method": "POST",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"time_package_id\": 1,\n    \"name\": \"John Doe\",\n    \"rfid_sn_left\": \"RFID123456\",\n    \"rfid_sn_right\": \"RFID789012\",\n    \"phone\": \"+1234567890\",\n    \"email\": \"john@example.com\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/customers",
+                            "host": ["{{base_url}}"],
+                            "path": ["customers"]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Customer",
+                    "request": {
+                        "method": "GET",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/customers/1",
+                            "host": ["{{base_url}}"],
+                            "path": ["customers", "1"]
+                        }
+                    }
+                },
+                {
+                    "name": "Update Customer",
+                    "request": {
+                        "method": "PUT",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            },
+                            {
+                                "key": "Content-Type",
+                                "value": "application/json"
+                            }
+                        ],
+                        "body": {
+                            "mode": "raw",
+                            "raw": "{\n    \"time_package_id\": 1,\n    \"name\": \"John Smith\",\n    \"rfid_sn_left\": \"RFID123456\",\n    \"rfid_sn_right\": \"RFID789012\",\n    \"phone\": \"+1234567890\",\n    \"email\": \"johnsmith@example.com\"\n}"
+                        },
+                        "url": {
+                            "raw": "{{base_url}}/customers/1",
+                            "host": ["{{base_url}}"],
+                            "path": ["customers", "1"]
+                        }
+                    }
+                },
+                {
+                    "name": "Delete Customer",
+                    "request": {
+                        "method": "DELETE",
+                        "header": [
+                            {
+                                "key": "Authorization",
+                                "value": "Bearer {{jwt_token}}"
+                            }
+                        ],
+                        "url": {
+                            "raw": "{{base_url}}/customers/1",
+                            "host": ["{{base_url}}"],
+                            "path": ["customers", "1"]
+                        }
+                    }
+                }
+            ]
+        },
+        {
+            "name": "Admin Endpoints",
+            "item": [
+                {
+                    "name": "Store Details",
+                    "item": [
+                        {
+                            "name": "Get Store Details",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/store-details",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "store-details"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Create Store Detail",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"store_name\": \"New Store\",\n    \"address\": \"456 Oak Avenue\",\n    \"phone\": \"+1987654321\",\n    \"email\": \"newstore@example.com\",\n    \"hours\": \"8:00 AM - 10:00 PM\",\n    \"description\": \"New store location\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/admin/store-details",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "store-details"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Get Store Detail",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/store-details/1",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "store-details", "1"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Update Store Detail",
+                            "request": {
+                                "method": "PUT",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"store_name\": \"Updated Store Name\",\n    \"address\": \"456 Oak Avenue\",\n    \"phone\": \"+1987654321\",\n    \"email\": \"updated@example.com\",\n    \"hours\": \"8:00 AM - 10:00 PM\",\n    \"description\": \"Updated store description\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/admin/store-details/1",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "store-details", "1"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Delete Store Detail",
+                            "request": {
+                                "method": "DELETE",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/store-details/1",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "store-details", "1"]
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Time Packages",
+                    "item": [
+                        {
+                            "name": "Get Time Packages",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/time-packages",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "time-packages"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Create Time Package",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"name\": \"Premium Package\",\n    \"duration_hours\": 12,\n    \"price\": 75.00,\n    \"description\": \"Premium 12-hour package\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/admin/time-packages",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "time-packages"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Get Time Package",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/time-packages/1",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "time-packages", "1"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Update Time Package",
+                            "request": {
+                                "method": "PUT",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"name\": \"Updated Premium Package\",\n    \"duration_hours\": 12,\n    \"price\": 80.00,\n    \"description\": \"Updated premium package\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/admin/time-packages/1",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "time-packages", "1"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Delete Time Package",
+                            "request": {
+                                "method": "DELETE",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/time-packages/1",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "time-packages", "1"]
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "Dynamic Pages",
+                    "item": [
+                        {
+                            "name": "Get Dynamic Pages",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/dynamic-pages",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "dynamic-pages"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Create Dynamic Page",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"title\": \"Privacy Policy\",\n    \"slug\": \"privacy-policy\",\n    \"content\": \"This is our privacy policy content...\",\n    \"meta_title\": \"Privacy Policy - Company\",\n    \"meta_description\": \"Our privacy policy\",\n    \"status\": \"active\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/admin/dynamic-pages",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "dynamic-pages"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Get Dynamic Page",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/dynamic-pages/1",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "dynamic-pages", "1"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Update Dynamic Page",
+                            "request": {
+                                "method": "PUT",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"title\": \"Updated Privacy Policy\",\n    \"slug\": \"privacy-policy\",\n    \"content\": \"Updated privacy policy content...\",\n    \"meta_title\": \"Privacy Policy - Company\",\n    \"meta_description\": \"Our updated privacy policy\",\n    \"status\": \"active\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/admin/dynamic-pages/1",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "dynamic-pages", "1"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Delete Dynamic Page",
+                            "request": {
+                                "method": "DELETE",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/dynamic-pages/1",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "dynamic-pages", "1"]
+                                }
+                            }
+                        }
+                    ]
+                },
+                {
+                    "name": "System Settings",
+                    "item": [
+                        {
+                            "name": "Get System Settings",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/system/settings",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "system", "settings"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Update System Settings",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"title\": \"Updated Company Name\",\n    \"system_name\": \"RobBarden\",\n    \"email\": \"admin@example.com\",\n    \"contact_number\": \"+1234567890\",\n    \"company_open_hour\": \"9:00 AM - 9:00 PM\",\n    \"copyright_text\": \"© 2024 Updated Company Name. All rights reserved.\",\n    \"address\": \"123 Main Street, City, State\",\n    \"description\": \"Updated company description\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/admin/system/settings",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "system", "settings"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Get Mail Settings",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/system/mail-settings",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "system", "mail-settings"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Update Mail Settings",
+                            "request": {
+                                "method": "POST",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    },
+                                    {
+                                        "key": "Content-Type",
+                                        "value": "application/json"
+                                    }
+                                ],
+                                "body": {
+                                    "mode": "raw",
+                                    "raw": "{\n    \"mail_mailer\": \"smtp\",\n    \"mail_host\": \"smtp.gmail.com\",\n    \"mail_port\": \"587\",\n    \"mail_username\": \"noreply@example.com\",\n    \"mail_password\": \"password\",\n    \"mail_encryption\": \"tls\",\n    \"mail_from_address\": \"noreply@example.com\"\n}"
+                                },
+                                "url": {
+                                    "raw": "{{base_url}}/admin/system/mail-settings",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "system", "mail-settings"]
+                                }
+                            }
+                        },
+                        {
+                            "name": "Clear Cache",
+                            "request": {
+                                "method": "GET",
+                                "header": [
+                                    {
+                                        "key": "Authorization",
+                                        "value": "Bearer {{jwt_token}}"
+                                    }
+                                ],
+                                "url": {
+                                    "raw": "{{base_url}}/admin/system/clear-cache",
+                                    "host": ["{{base_url}}"],
+                                    "path": ["admin", "system", "clear-cache"]
+                                }
+                            }
+                        }
+                    ]
+                }
+            ]
+        },
+        {
+            "name": "Public Endpoints",
+            "item": [
+                {
+                    "name": "Get System Info",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/system-info",
+                            "host": ["{{base_url}}"],
+                            "path": ["system-info"]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Dynamic Pages",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/dynamic-pages?page=1&per_page=10",
+                            "host": ["{{base_url}}"],
+                            "path": ["dynamic-pages"],
+                            "query": [
+                                {
+                                    "key": "page",
+                                    "value": "1"
+                                },
+                                {
+                                    "key": "per_page",
+                                    "value": "10"
+                                }
+                            ]
+                        }
+                    }
+                },
+                {
+                    "name": "Get Dynamic Page",
+                    "request": {
+                        "method": "GET",
+                        "url": {
+                            "raw": "{{base_url}}/dynamic-pages/about-us",
+                            "host": ["{{base_url}}"],
+                            "path": ["dynamic-pages", "about-us"]
+                        }
+                    }
+                }
+            ]
+        }
+    ]
+}
