@@ -17,11 +17,11 @@ class StepperPageService
             $perPage = $request->per_page ?? 25;
             $search = $request->search;
 
-            $query = StepperPage::where('status', 'active');
+            $query = StepperPage::where('status', 'active')->select('id', 'title', 'description', 'order_no', 'image');
             if ($search) {
                 $query->where(function ($q) use ($search) {
                     $q->where('title', 'like', "%{$search}%")
-                      ->orWhere('description', 'like', "%{$search}%");
+                        ->orWhere('description', 'like', "%{$search}%");
                 });
             }
 
@@ -39,10 +39,11 @@ class StepperPageService
     {
         try {
             $page = StepperPage::where('id', $id)
+                ->select('id', 'title', 'description', 'order_no', 'image')
                 ->where('status', 'active')
                 ->first();
 
-            if (! $page) {
+            if (!$page) {
                 throw new Exception('Stepper page not found or inactive');
             }
 
