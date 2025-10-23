@@ -26,7 +26,7 @@ class LoginController extends Controller
         $validateData = $request->validate([
             'email' => 'required_without:user_name|string',
             'password' => 'required|string',
-            'user_name' => 'required_without:email|string',
+            // 'user_name' => 'required_without:email|string',
             // 'role' => 'required|in:customer,contractor',
         ]);
         try {

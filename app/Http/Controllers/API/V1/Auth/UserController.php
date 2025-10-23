@@ -40,10 +40,6 @@ class UserController extends Controller
             'cover_photo' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
             'phone' => 'nullable|string|unique:users,phone,' . auth()->user()->id . '|max:20|min:10',
             'password' => 'nullable|string|min:6|confirmed',
-            'age' => 'nullable|integer',
-            'weight' => 'nullable|string',
-            'height' => 'nullable|string',
-            'is_physical_distress' => 'nullable|boolean',
             'gender' => 'nullable|in:male,female,others',
             'brithdate' => 'nullable|date|date_format:Y-m-d|before:today',
         ]);
