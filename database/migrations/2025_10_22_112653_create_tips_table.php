@@ -14,7 +14,7 @@ return new class extends Migration
         Schema::create('tips', function (Blueprint $table) {
             $table->id();
             $table->text('text');
-            $table->string('type');
+            $table->string('type'); //moneycoach, debtcoach, goalcoach
             $table->string('status')->default('active');
             $table->timestamps();
         });
