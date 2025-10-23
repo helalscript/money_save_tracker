@@ -38,6 +38,8 @@ class DatabaseSeeder extends Seeder
         ]);
         $this->call(SystemSettingSeeder::class);
         $this->call(TimePackageSeeder::class);
+        $this->call(FeatureSeeder::class);
+        $this->call(PackageSeeder::class);
         // $this->call(FaqSeeder::class);
     }
 }
