@@ -41,6 +41,7 @@ class DatabaseSeeder extends Seeder
         $this->call(FeatureSeeder::class);
         $this->call(PackageSeeder::class);
         $this->call(StepperPageSeeder::class);
-        // $this->call(FaqSeeder::class);
+        $this->call(DynamicPageSeeder::class);
+        $this->call(FaqSeeder::class);
     }
 }

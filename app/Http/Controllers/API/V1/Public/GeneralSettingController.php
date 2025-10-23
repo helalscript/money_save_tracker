@@ -56,4 +56,17 @@ class GeneralSettingController extends Controller
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
     }
+
+    public function getFaqs(Request $request)
+    {
+        try {
+            $faqs = $this->generalSettingService->getFaqs($request);
+
+            return Helper::jsonResponse(true, 'FAQs fetched successfully', 200, $faqs, true);
+        } catch (Exception $e) {
+            Log::error('GeneralSettingController::getFaqs'.$e->getMessage());
+
+            return Helper::jsonErrorResponse($e->getMessage(), 500);
+        }
+    }
 }

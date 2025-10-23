@@ -19,8 +19,9 @@ class PackageService
             $perPage = $request->per_page ?? 25;
 
             $packages = Package::where('status', 'active')
+                ->select('id', 'title', 'price_monthly', 'description', 'image','free_trail_day')
                 ->with(['features' => function($query) {
-                    $query->where('status', 'active');
+                    // $query->select('id', 'package_id', 'feature_name','description');
                 }])
                 ->orderBy('price_monthly', 'asc')
                 ->paginate($perPage);
