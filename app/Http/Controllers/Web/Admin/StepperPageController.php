@@ -104,12 +104,11 @@ class StepperPageController extends Controller
         return redirect()->route('admin.stepper-pages.index')->with('success', 'Stepper page deleted successfully.');
     }
 
-    public function toggleStatus(string $id): RedirectResponse
+    public function toggleStatus(string $id)
     {
         $page = StepperPage::findOrFail($id);
         $page->status = $page->status === 'active' ? 'inactive' : 'active';
         $page->save();
-
         return back()->with('success', 'Status updated.');
     }
 }
