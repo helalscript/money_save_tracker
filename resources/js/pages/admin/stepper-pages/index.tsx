@@ -37,6 +37,8 @@ interface Props {
 		current_page: number;
 		last_page: number;
 		total: number;
+		prev_page_url: string | null;
+		next_page_url: string | null;
 	};
 	filters: { search?: string; per_page?: number };
 }
@@ -55,6 +57,14 @@ const toggleStatus = (id: number, currentStatus: string) => {
 	});
 };
 
+const handleDelete = (id: number) => {
+	if (confirm("Are you sure you want to delete this stepper page?")) {
+		router.delete(`/admin/stepper-pages/${id}`, {
+			preserveScroll: true,
+			preserveState: true,
+		});
+	}
+};
 
 export default function Index({ pages, filters }: Props) {
 	console.log(pages);
@@ -96,26 +106,27 @@ export default function Index({ pages, filters }: Props) {
 						<TableBody>
 							{pages.data.length > 0 ? (
 								pages.data.map((page: StepperPage, index: number) => (
-									<TableRow key={page.id}>
+									<TableRow key={page?.id}>
 										<TableCell>{index + 1}</TableCell>
 										<TableCell>{page?.title}</TableCell>
-										<TableCell>{page?.image}</TableCell>
+										{/* ✅ Image */}
 										<TableCell>
 											{page?.image ? (
 												<img
-													src={`/${page.image}`}
-													alt={page.title}
+													src={`/${page?.image}`}
+													alt={page?.title}
 													className="w-16 h-16 object-cover rounded"
 												/>
 											) : (
 												<span className="text-gray-400">No Image</span>
 											)}
 										</TableCell>
+										<TableCell>{page?.order_no}</TableCell>
 										{/* ✅ Status Toggle Button */}
 										<TableCell>
 											<button
-												onClick={() => toggleStatus(page.id, page.status)}
-												className={`px-3 py-1 rounded-full text-white text-sm ${page.status === "active" ? "bg-green-500" : "bg-red-500"
+												onClick={() => toggleStatus(page?.id, page?.status)}
+												className={`px-3 py-1 rounded-full text-white text-sm ${page?.status === "active" ? "bg-green-500" : "bg-red-500"
 													}`}
 											>
 												{page.status === "active" ? "Active" : "Inactive"}
@@ -124,14 +135,14 @@ export default function Index({ pages, filters }: Props) {
 
 										{/* ✅ Action Buttons */}
 										<TableCell className="flex gap-2">
-											<Link href={`/admin/stepper-pages/${page.id}/edit`}>
+											<Link href={`/admin/stepper-pages/${page?.id}/edit`}>
 												<Button size="sm" variant="outline">Edit</Button>
 											</Link>
 
 											<Button
 												size="sm"
 												variant="destructive"
-												onClick={() => deletePage(page.id)}
+												onClick={() => handleDelete(page?.id)}
 											>
 												Delete
 											</Button>
@@ -147,19 +158,10 @@ export default function Index({ pages, filters }: Props) {
 							)}
 						</TableBody>
 					</Table>
-
+					{/* Pagination Controls */}
 					<div className="flex items-end justify-end m-4">
 						<Pagination className="flex-1">
 							<PaginationContent>
-								{/* Previous Button */}
-								<PaginationItem>
-									{pages.prev_page_url ? (
-										<PaginationPrevious href={pages.prev_page_url} />
-									) : (
-										<PaginationPrevious aria-disabled="true" className="opacity-50 cursor-not-allowed" />
-									)}
-								</PaginationItem>
-
 								{/* Page Numbers */}
 								{pages.links.map((link, index) => (
 									<PaginationItem key={index}>
@@ -174,15 +176,6 @@ export default function Index({ pages, filters }: Props) {
 										)}
 									</PaginationItem>
 								))}
-
-								{/* Next Button */}
-								<PaginationItem>
-									{pages.next_page_url ? (
-										<PaginationNext href={pages.next_page_url} />
-									) : (
-										<PaginationNext aria-disabled="true" className="opacity-50 cursor-not-allowed" />
-									)}
-								</PaginationItem>
 							</PaginationContent>
 						</Pagination>
 					</div>

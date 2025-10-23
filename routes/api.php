@@ -66,6 +66,7 @@ Route::group(['middleware' => ['auth:api', 'is_user']], function ($router) {
 Route::get('system-info', [GeneralSettingController::class, 'getSystemInfo']);
 Route::get('dynamic-pages', [GeneralSettingController::class, 'getDynamicPages']);
 Route::get('dynamic-pages/{page_slug}', [GeneralSettingController::class, 'showDaynamicPage']);
+Route::get('faqs', [GeneralSettingController::class, 'getFaqs']);
 Route::apiResource('packages', PackageController::class)->only(['index', 'show']);
 Route::apiResource('stepper-pages', PublicStepperPageController::class)->only(['index', 'show']);
 

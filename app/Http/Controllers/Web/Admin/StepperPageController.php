@@ -16,7 +16,7 @@ class StepperPageController extends Controller
 {
     public function index(Request $request): Response
     {
-        $perPage = $request->per_page ?? 25;
+        $perPage = $request->per_page ?? 10;
         $search = $request->search;
 
         $query = StepperPage::query();
