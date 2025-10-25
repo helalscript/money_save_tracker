@@ -3,9 +3,11 @@
 namespace App\Services\API\V1\User;
 
 use App\Models\Goal;
+use DB;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use Carbon\Carbon;
 
 class GoalService
 {
@@ -26,10 +28,15 @@ class GoalService
         try {
             $perPage = $request->per_page ?? 25;
 
-            $goals = Goal::where('user_id', $this->user->id)
-                ->with(['checkIns' => function($query) {
+            $goals = Goal::with([
+                'checkIns' => function ($query) {
                     $query->orderBy('check_date', 'desc');
-                }])
+                }
+            ])
+                ->where([
+                    'status' => 'active',
+                    'user_id' => $this->user->id
+                ])
                 ->orderBy('created_at', 'desc')
                 ->paginate($perPage);
 
@@ -49,16 +56,31 @@ class GoalService
     public function store(array $validatedData)
     {
         try {
+            DB::beginTransaction();
+            $validatedData['start_date'] = Carbon::today()->toDateString();
+            $totalDays = (new \DateTime($validatedData['end_date']))->diff(new \DateTime($validatedData['start_date']))->days + 1;
+            $amountToSave = $validatedData['target_amount'];
+            // $amountToSave = $validatedData['target_amount'] - ($validatedData['alredy_saved'] ?? 0);
+            $validatedData['daily_target'] = $amountToSave / $totalDays;
             $validatedData['user_id'] = $this->user->id;
-            
-            $goal = Goal::create($validatedData);
-            
-            $goal->load(['checkIns' => function($query) {
-                $query->orderBy('check_date', 'desc');
-            }]);
+            $validatedData['status'] = 'active';
 
+            $goal = Goal::create($validatedData);
+
+            $goal->load([
+                'checkIns' => function ($query) {
+                    $query->orderBy('check_date', 'desc');
+                }
+            ]);
+            //satus update other goals
+            Goal::where('user_id', $this->user->id)
+                ->where('id', '!=', $goal->id)
+                ->update(['status' => 'inactive']);
+
+            DB::commit();
             return $goal;
         } catch (Exception $e) {
+            DB::rollBack();
             Log::error("GoalService::store" . $e->getMessage());
             throw $e;
         }
@@ -73,16 +95,22 @@ class GoalService
     public function show(int $id)
     {
         try {
-            $goal = Goal::where('id', $id)
-                ->where('user_id', $this->user->id)
-                ->with(['checkIns' => function($query) {
-                    $query->orderBy('check_date', 'desc');
-                }])
+            $goal = Goal::where([
+                'id' => $id,
+                'user_id' => $this->user->id,
+                'status' => 'active',
+            ])
+                ->with([
+                    'checkIns' => function ($query) {
+                        $query->orderBy('check_date', 'desc');
+                    }
+                ])
                 ->first();
 
             if (!$goal) {
                 throw new Exception('Goal not found or does not belong to you');
             }
+            $goal['others_data'] = $this->calculateNewEndDate($goal);
 
             return $goal;
         } catch (Exception $e) {
@@ -110,10 +138,12 @@ class GoalService
             }
 
             $goal->update($validatedData);
-            
-            $goal->load(['checkIns' => function($query) {
-                $query->orderBy('check_date', 'desc');
-            }]);
+
+            $goal->load([
+                'checkIns' => function ($query) {
+                    $query->orderBy('check_date', 'desc');
+                }
+            ]);
 
             return $goal;
         } catch (Exception $e) {
@@ -147,4 +177,87 @@ class GoalService
             throw $e;
         }
     }
+
+
+    public function calculateNewEndDate($goal)
+    {
+        // Total days between start and end date
+        $totalDays = Carbon::parse($goal->start_date)->diffInDays(Carbon::parse($goal->end_date)) + 1;
+
+        // Per day target amount
+        $dailyTarget = $goal->target_amount / $totalDays;
+
+        // Total saved amount from checking table
+        $savedAmount = $goal->checkIns()->sum('amount');
+
+        // Remaining amount
+        $remainingAmount = $goal->target_amount - $savedAmount;
+        //persantageProgress
+        $persantageProgress = ($savedAmount / $goal->target_amount) * 100;
+        // Default new end date = original end date
+        $newEndDate = Carbon::parse($goal->end_date);
+
+        // Goal Status Calculation (Green / Yellow / Red)
+        $this->updateGoalDeadlineIndicator($goal, $newEndDate);
+
+        //  Now calculate potential newEndDate based on remaining saving
+        if ($remainingAmount > 0) {
+            $extraDays = ceil($remainingAmount / $dailyTarget);
+            $newEndDate = $newEndDate->addDays($extraDays);
+        }
+
+        return [
+            'extra_days' => isset($extraDays) ? $extraDays : 0,
+            'new_end_date' => $newEndDate->toDateString(),
+            'saved_amount' => $savedAmount,
+            'remaining_amount' => $remainingAmount,
+            'daily_target' => number_format($dailyTarget, 2),
+            'deadline_status' => $goal->deadline_status ?? 'green',
+            'persantage_progress' => number_format($persantageProgress, 2)
+        ];
+    }
+
+    public function calculateStreak($goal)
+    {
+        // Get all checking dates from `checkIns` table with date column name `check_date`
+        $checkingDates = $goal->checkIns()
+            ->orderBy('check_date', 'desc')
+            ->pluck('check_date')
+            ->map(fn($date) => Carbon::parse($date)->toDateString())
+            ->toArray();
+
+        $streak = 0;
+        $today = Carbon::today();
+
+        // Loop through checking dates from today backward
+        while (in_array($today->toDateString(), $checkingDates)) {
+            $streak++;
+            $today->subDay(); // Move to previous day
+        }
+
+        // Goal update with new streak count
+        $goal->update(['current_streak' => $streak]);
+
+        return $streak;
+    }
+
+    public function updateGoalDeadlineIndicator($goal, $newEndDate)
+    {
+        // Goal Status Calculation (Green / Yellow / Red)
+        $today = Carbon::today();
+
+        if ($today->lte($newEndDate)) {
+            $goal->update(['deadline_status' => 'green']);
+        } else {
+            $daysOver = $newEndDate->diffInDays($today);
+
+            if ($daysOver >= 1 && $daysOver <= 3) {
+                $goal->update(['deadline_status' => 'yellow']);
+            } elseif ($daysOver >= 7) {
+                $goal->update(['deadline_status' => 'red']);
+            }
+        }
+    }
+
+
 }
