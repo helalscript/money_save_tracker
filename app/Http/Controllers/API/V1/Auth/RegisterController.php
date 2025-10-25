@@ -7,6 +7,7 @@ use App\Mail\OtpMail;
 use App\Models\Contractor;
 use App\Models\License;
 use App\Notifications\UserRegistrationNotification;
+use App\Notifications\WelcomeNotification;
 use Illuminate\Support\Facades\Auth;
 use App\Http\Controllers\Controller;
 use App\Models\User;
@@ -82,7 +83,7 @@ class RegisterController extends Controller
                 $user = User::create($userData);
             }
 
-            // Mail::to($user->email)->send(new OtpMail($otp, $user, 'Verify Your Email Address')); // For testing purposes, you can comment this line. In production, uncomment it.
+            Mail::to($user->email)->send(new OtpMail($otp, $user, 'Verify Your Email Address')); // For testing purposes, you can comment this line. In production, uncomment it.
 
             DB::commit();
             return Helper::jsonResponse(true, 'A verification email has been successfully sent to your email address. Please check your inbox to complete the verification.', 200);
@@ -129,7 +130,8 @@ class RegisterController extends Controller
             $user->otp_expires_at = null;
             $user->save();
 
-
+            // user get a welcome notification
+            $user->notify(new WelcomeNotification());
 
             // Notify admins about the new registration
             // $admins = User::where('role', 'admin')->get();
@@ -186,7 +188,6 @@ class RegisterController extends Controller
             //* Send the new OTP to the user's email
 
             try {
-                // Mail::to($user->email)->send(new OtpMail($otp, $user, 'Verify Your Email Address'));
                 // Mail::to($user->email)->send(new OtpMail($newOtp, $user, 'Verify Your Email Address')); // For testing purposes, you can comment this line. In production, uncomment it.
                 return Helper::jsonResponse(true, 'A new OTP has been sent to your email.', 200);
             } catch (Exception $e) {

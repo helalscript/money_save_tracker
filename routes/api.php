@@ -12,6 +12,7 @@ use App\Http\Controllers\API\V1\Public\PackageController;
 use App\Http\Controllers\API\V1\Public\StepperPageController as PublicStepperPageController;
 use App\Http\Controllers\API\V1\User\CheckInController;
 use App\Http\Controllers\API\V1\User\GoalController;
+use App\Http\Controllers\API\V1\User\NotificationController;
 use App\Http\Controllers\API\V1\User\PaymentController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -20,7 +21,8 @@ use Illuminate\Support\Facades\Route;
 //     return $request->user();
 // })->middleware('auth');
 
-Route::group(['middleware' => ['guest:api', 'throttle:2,1']], function ($router) {
+Route::group(['middleware' => ['guest:api']], function ($router) {
+// Route::group(['middleware' => ['guest:api', 'throttle:2,1']], function ($router) {
     // register
     Route::post('register', [RegisterController::class, 'register']);
     Route::post('/verify-email', [RegisterController::class, 'VerifyEmail']);
@@ -48,6 +50,10 @@ Route::group(['middleware' => ['auth:api', 'is_user']], function ($router) {
     Route::apiResource('goals', GoalController::class);
     Route::apiResource('check-ins', CheckInController::class);
     Route::apiResource('payments', PaymentController::class);
+    // notifications
+    Route::apiResource('notifications', NotificationController::class)->only(['index', 'show']);
+    Route::post('notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
+    Route::delete('notifications/delete-all', [NotificationController::class, 'deleteAll']);
 });
 
 // this is for admin

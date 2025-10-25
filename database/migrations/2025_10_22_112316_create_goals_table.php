@@ -23,6 +23,8 @@ return new class extends Migration
             $table->date('start_date');
             $table->date('end_date');
             $table->decimal('daily_target', 15, 2)->nullable();
+            $table->integer('current_streak')->default(0);
+            $table->enum('deadline_indicator',['green', 'yellow', 'red'])->default('green');
             $table->string('status')->default('active');
             $table->timestamps();
         });

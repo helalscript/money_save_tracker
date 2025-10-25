@@ -46,12 +46,12 @@ class GoalController extends Controller
             'debt_blance' => 'nullable|numeric|min:0',
             'goal_type' => 'required|string|in:save_money,paying_debt',
             'target_amount' => 'required|numeric|min:0',
-            'start_date' => 'required|date',
-            'end_date' => 'required|date|after:start_date',
-            'daily_target' => 'nullable|numeric|min:0',
-            'status' => 'nullable|string|in:active,inactive,completed',
+            // 'start_date' => 'required|date|date_format:Y-m-d|before:end_date|after_or_equal:today',
+            'end_date' => 'required|date|date_format:Y-m-d|after:today',
+            // 'daily_target' => 'nullable|numeric|min:0',
+            // 'status' => 'nullable|string|in:active,inactive,completed',
         ]);
-        
+        // dd($validateData);
         try {
             $goal = $this->goalService->store($validateData);
 
