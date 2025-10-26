@@ -110,8 +110,8 @@ class GoalService
             if (!$goal) {
                 throw new Exception('Goal not found or does not belong to you');
             }
+            $goal['current_streak'] = $this->calculateStreak($goal);
             $goal['others_data'] = $this->calculateNewEndDate($goal);
-
             return $goal;
         } catch (Exception $e) {
             Log::error("GoalService::show" . $e->getMessage());
@@ -188,31 +188,35 @@ class GoalService
         $dailyTarget = $goal->target_amount / $totalDays;
 
         // Total saved amount from checking table
-        $savedAmount = $goal->checkIns()->sum('amount');
+        $savedAmount = $goal->checkIns()->sum('amount_saved');
 
         // Remaining amount
         $remainingAmount = $goal->target_amount - $savedAmount;
         //persantageProgress
         $persantageProgress = ($savedAmount / $goal->target_amount) * 100;
-        // Default new end date = original end date
-        $newEndDate = Carbon::parse($goal->end_date);
+        // Original end date
+        $originalEndDate = Carbon::parse($goal->end_date);
+
+        // Calculate new end date based on remaining amount
+        $newEndDate = today()->subDays(1); // Clone to avoid modifying original
+        $extraDays = 0;
+
+        if ($remainingAmount > 0) {
+            $extraDays = ceil($remainingAmount / $dailyTarget);
+            $newEndDate->addDays($extraDays);
+        }
 
         // Goal Status Calculation (Green / Yellow / Red)
         $this->updateGoalDeadlineIndicator($goal, $newEndDate);
 
-        //  Now calculate potential newEndDate based on remaining saving
-        if ($remainingAmount > 0) {
-            $extraDays = ceil($remainingAmount / $dailyTarget);
-            $newEndDate = $newEndDate->addDays($extraDays);
-        }
-
         return [
-            'extra_days' => isset($extraDays) ? $extraDays : 0,
+            'needed_days' => isset($extraDays) ? $extraDays : 0,
+            'original_end_date' => $originalEndDate->toDateString(),
             'new_end_date' => $newEndDate->toDateString(),
             'saved_amount' => $savedAmount,
             'remaining_amount' => $remainingAmount,
             'daily_target' => number_format($dailyTarget, 2),
-            'deadline_status' => $goal->deadline_status ?? 'green',
+            'deadline_indicator' => $goal->deadline_indicator ?? 'green',
             'persantage_progress' => number_format($persantageProgress, 2)
         ];
     }
@@ -224,6 +228,8 @@ class GoalService
             ->orderBy('check_date', 'desc')
             ->pluck('check_date')
             ->map(fn($date) => Carbon::parse($date)->toDateString())
+            ->unique() // Add this to remove duplicate dates
+            ->values() // Optional: reset array keys
             ->toArray();
 
         $streak = 0;
@@ -243,21 +249,45 @@ class GoalService
 
     public function updateGoalDeadlineIndicator($goal, $newEndDate)
     {
-        // Goal Status Calculation (Green / Yellow / Red)
-        $today = Carbon::today();
-
-        if ($today->lte($newEndDate)) {
-            $goal->update(['deadline_status' => 'green']);
-        } else {
-            $daysOver = $newEndDate->diffInDays($today);
-
-            if ($daysOver >= 1 && $daysOver <= 3) {
-                $goal->update(['deadline_status' => 'yellow']);
-            } elseif ($daysOver >= 7) {
-                $goal->update(['deadline_status' => 'red']);
+        // dd($newEndDate->toDateString());
+        $goalEndDate = $goal->end_date;
+        // deadline not crossed yet
+        if ($newEndDate->lte($goalEndDate)) {
+            $goal->update(['deadline_indicator' => 'green']);
+        }
+        // deadline crossed
+        else {
+            $daysOver = $goalEndDate->diffInDays($newEndDate);
+            // 1 to 3 day over to yellow
+            if ($daysOver >= 1) {
+                $goal->update(['deadline_indicator' => 'yellow']);
+            } elseif ($daysOver > 3) {
+                $goal->update(['deadline_indicator' => 'red']); // more than 3 days over to red
             }
         }
     }
 
-
+    public function getActiveGoal()
+    {
+        try {
+            $goal = Goal::where([
+                'user_id' => $this->user->id,
+                'status' => 'active',
+            ])->with([
+                        'checkIns' => function ($query) {
+                            $query->orderBy('check_date', 'desc');
+                        }
+                    ])
+                ->first();
+            if (!$goal) {
+                throw new Exception('Goal not found or does not belong to you');
+            }
+            $goal['current_streak'] = $this->calculateStreak($goal);
+            $goal['others_data'] = $this->calculateNewEndDate($goal);
+            return $goal;
+        } catch (Exception $e) {
+            Log::error("GoalService::getActiveGoal" . $e->getMessage());
+            throw $e;
+        }
+    }
 }

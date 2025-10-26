@@ -48,6 +48,7 @@ Route::group(['middleware' => 'auth:api'], function ($router) {
 // this is for user
 Route::group(['middleware' => ['auth:api', 'is_user']], function ($router) {
     Route::apiResource('goals', GoalController::class);
+    Route::get('active-goal', [GoalController::class, 'getActiveGoal']);
     Route::apiResource('check-ins', CheckInController::class);
     Route::apiResource('payments', PaymentController::class);
     // notifications

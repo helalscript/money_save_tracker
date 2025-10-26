@@ -47,7 +47,8 @@ class CheckInService
      * @param array $validatedData
      * @return mixed
      */
-    public function store(array $validatedData)
+    public function 
+    <div class=""></div>store(array $validatedData)
     {
         try {
             // Verify the goal belongs to the authenticated user

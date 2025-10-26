@@ -73,7 +73,7 @@ export default function Index({ pages, filters }: Props) {
 			<Head title="Stepper Pages" />
 
 
-			<Card>
+			<Card className="m-4">
 
 				<div className="flex items-center justify-between m-4">
 					<div className="w-1/4">
@@ -88,11 +88,11 @@ export default function Index({ pages, filters }: Props) {
 						<Link ><Button>Add New</Button></Link>
 					</div>
 				</div>
-				<div>
+				<div className='mx-4'>
 					{/* <pre>{JSON.stringify(pages, null, 2)}</pre> */}
 					<Table className="w-full">
 
-						<TableHeader className="variant-secondary">
+						<TableHeader className="variant-secondary bg-gray-100 dark:bg-gray-800 m-4">
 							<TableRow>
 								<TableHead className="w-[50px]">#</TableHead>
 								<TableHead>Title</TableHead>
