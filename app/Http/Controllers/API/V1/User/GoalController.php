@@ -134,4 +134,16 @@ class GoalController extends Controller
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
     }
+    public function getWeeklyStreakData()
+    {
+        try {
+            $streakData = $this->goalService->getWeeklyStreakData();
+
+            return Helper::jsonResponse(true, 'Weekly Streak Data fetched successfully', 200, $streakData);
+        } catch (Exception $e) {
+            Log::error('GoalController::getWeeklyStreakData' . $e->getMessage());
+
+            return Helper::jsonErrorResponse($e->getMessage(), 500);
+        }
+    }
 }

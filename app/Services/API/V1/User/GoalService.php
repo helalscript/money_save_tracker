@@ -223,22 +223,37 @@ class GoalService
 
     public function calculateStreak($goal)
     {
-        // Get all checking dates from `checkIns` table with date column name `check_date`
+        // Get all checking dates from `checkIns` table
         $checkingDates = $goal->checkIns()
             ->orderBy('check_date', 'desc')
             ->pluck('check_date')
             ->map(fn($date) => Carbon::parse($date)->toDateString())
-            ->unique() // Add this to remove duplicate dates
-            ->values() // Optional: reset array keys
+            ->unique()
+            ->values()
             ->toArray();
 
-        $streak = 0;
-        $today = Carbon::today();
+        // If no check-ins exist, streak is 0
+        if (empty($checkingDates)) {
+            $goal->update(['current_streak' => 0]);
+            return 0;
+        }
 
-        // Loop through checking dates from today backward
-        while (in_array($today->toDateString(), $checkingDates)) {
+        $streak = 0;
+        $today = Carbon::today()->toDateString();
+        $checkDate = Carbon::today();
+
+        // Check if today has a check-in
+        $todayHasCheckIn = in_array($today, $checkingDates);
+
+        // If today has no check-in, check from yesterday
+        if (!$todayHasCheckIn) {
+            $checkDate->subDay();
+        }
+
+        // Count consecutive days from checkDate backward
+        while (in_array($checkDate->toDateString(), $checkingDates)) {
             $streak++;
-            $today->subDay(); // Move to previous day
+            $checkDate->subDay();
         }
 
         // Goal update with new streak count
@@ -289,5 +304,59 @@ class GoalService
             Log::error("GoalService::getActiveGoal" . $e->getMessage());
             throw $e;
         }
+    }
+
+    public function getWeeklyStreakData()
+    {
+        $goal = Goal::where([
+            'user_id' => $this->user->id,
+            'status' => 'active',
+        ])->with([
+                    'checkIns' => function ($query) {
+                        $query->orderBy('check_date', 'desc');
+                    }
+                ])
+            ->first();
+        // Get current streak
+        $currentStreak = $this->calculateStreak($goal);
+
+        // Get all check-in dates
+        $checkInDates = $goal->checkIns()
+            ->pluck('check_date')
+            ->map(fn($date) => Carbon::parse($date)->toDateString())
+            ->unique()
+            ->toArray();
+
+        // Get current week (Mon to Sun)
+        $startOfWeek = Carbon::now()->startOfWeek(); // Monday
+        $endOfWeek = Carbon::now()->endOfWeek(); // Sunday
+
+        // Prepare weekly data
+        $weeklyData = [];
+        $currentDate = $startOfWeek->copy();
+
+        for ($i = 0; $i < 7; $i++) {
+            $dateString = $currentDate->toDateString();
+            $dayName = $currentDate->format('D'); // Mon, Tue, Wed...
+
+            $weeklyData[] = [
+                'date' => $dateString,
+                'day' => $dayName,
+                'day_full' => $currentDate->format('l'), // Monday, Tuesday...
+                'is_checked' => in_array($dateString, $checkInDates),
+                'is_today' => $currentDate->isToday(),
+                'is_future' => $currentDate->isFuture(),
+            ];
+
+            $currentDate->addDay();
+        }
+
+        return [
+            'current_streak' => $currentStreak,
+            'streak_text' => $currentStreak . ' day streak!',
+            'message' => $currentStreak > 0 ? 'Keep it going!' : 'Start your streak today!',
+            'week_range' => $startOfWeek->format('M d') . ' - ' . $endOfWeek->format('M d'),
+            'weekly_checkins' => $weeklyData,
+        ];
     }
 }
