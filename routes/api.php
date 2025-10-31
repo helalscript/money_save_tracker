@@ -53,14 +53,17 @@ Route::group(['middleware' => ['auth:api', 'is_user']], function ($router) {
     Route::get('weekly-streak', [GoalController::class, 'getWeeklyStreakData']);
     Route::apiResource('check-ins', CheckInController::class);
     Route::apiResource('payments', PaymentController::class);
-    // notifications
-    Route::apiResource('notifications', NotificationController::class)->only(['index', 'show']);
-    Route::post('notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
-    Route::delete('notifications/delete-all', [NotificationController::class, 'deleteAll']);
+    
     // tips
     Route::get('tips/today', [TipsController::class, 'getTodayTips']);
     Route::post('tips/refresh', [TipsController::class, 'refreshTips']);
     Route::post('tips/{id}/mark-done', [TipsController::class, 'markAsDone']);
+
+    // notifications
+    Route::apiResource('notifications', NotificationController::class)->only(['index', 'show']);
+    Route::post('notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
+    Route::delete('notifications/delete-all', [NotificationController::class, 'deleteAll']);
+    
 });
 
 // this is for admin

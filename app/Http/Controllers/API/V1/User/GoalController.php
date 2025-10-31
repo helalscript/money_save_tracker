@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API\V1\User;
 
 use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\API\V1\GoalResource;
 use App\Services\API\V1\User\GoalService;
 use Exception;
 use Illuminate\Http\Request;
@@ -127,7 +128,7 @@ class GoalController extends Controller
         try {
             $goal = $this->goalService->getActiveGoal();
 
-            return Helper::jsonResponse(true, 'Active Goal fetched successfully', 200, $goal);
+            return Helper::jsonResponse(true, 'Active Goal fetched successfully', 200, GoalResource::make($goal));
         } catch (Exception $e) {
             Log::error('GoalController::getActiveGoal' . $e->getMessage());
 
