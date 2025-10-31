@@ -33,7 +33,22 @@ class Feature extends Model
     public function packages(): BelongsToMany
     {
         return $this->belongsToMany(Package::class, 'package_feature')
-                    ->withPivot(['description', 'image', 'status'])
-                    ->withTimestamps();
+            ->withPivot(['description', 'image', 'status'])
+            ->withTimestamps();
+    }
+
+    public function getImageAttribute($value): string|null
+    {
+        if (filter_var($value, FILTER_VALIDATE_URL)) {
+            return $value;
+        }
+        // Check if the request is an API request
+        if (request()->is('api/*') && !empty($value)) {
+            // Return the full URL for API requests
+            return url($value);
+        }
+
+        // Return only the path for web requests
+        return $value;
     }
 }
