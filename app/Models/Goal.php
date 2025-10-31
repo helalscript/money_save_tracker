@@ -19,6 +19,8 @@ class Goal extends Model
         'start_date',
         'end_date',
         'daily_target',
+        'current_streak',
+        'deadline_indicator',
         'status',
     ];
 
@@ -32,6 +34,8 @@ class Goal extends Model
         'start_date' => 'date',
         'end_date' => 'date',
         'goal_type' => 'string',
+        'current_streak' => 'integer',
+        'deadline_indicator' => 'string',
         'status' => 'string',
     ];
 

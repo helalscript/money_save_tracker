@@ -16,7 +16,7 @@ class StepperPageController extends Controller
 {
     public function index(Request $request): Response
     {
-        $perPage = $request->per_page ?? 25;
+        $perPage = $request->per_page ?? 10;
         $search = $request->search;
 
         $query = StepperPage::query();
@@ -104,12 +104,11 @@ class StepperPageController extends Controller
         return redirect()->route('admin.stepper-pages.index')->with('success', 'Stepper page deleted successfully.');
     }
 
-    public function toggleStatus(string $id): RedirectResponse
+    public function toggleStatus(string $id)
     {
         $page = StepperPage::findOrFail($id);
         $page->status = $page->status === 'active' ? 'inactive' : 'active';
         $page->save();
-
         return back()->with('success', 'Status updated.');
     }
 }

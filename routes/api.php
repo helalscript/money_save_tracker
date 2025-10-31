@@ -12,7 +12,9 @@ use App\Http\Controllers\API\V1\Public\PackageController;
 use App\Http\Controllers\API\V1\Public\StepperPageController as PublicStepperPageController;
 use App\Http\Controllers\API\V1\User\CheckInController;
 use App\Http\Controllers\API\V1\User\GoalController;
+use App\Http\Controllers\API\V1\User\NotificationController;
 use App\Http\Controllers\API\V1\User\PaymentController;
+use App\Http\Controllers\API\V1\User\TipsController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -20,7 +22,8 @@ use Illuminate\Support\Facades\Route;
 //     return $request->user();
 // })->middleware('auth');
 
-Route::group(['middleware' => ['guest:api', 'throttle:2,1']], function ($router) {
+Route::group(['middleware' => ['guest:api']], function ($router) {
+// Route::group(['middleware' => ['guest:api', 'throttle:2,1']], function ($router) {
     // register
     Route::post('register', [RegisterController::class, 'register']);
     Route::post('/verify-email', [RegisterController::class, 'VerifyEmail']);
@@ -46,8 +49,21 @@ Route::group(['middleware' => 'auth:api'], function ($router) {
 // this is for user
 Route::group(['middleware' => ['auth:api', 'is_user']], function ($router) {
     Route::apiResource('goals', GoalController::class);
+    Route::get('active-goal', [GoalController::class, 'getActiveGoal']);
+    Route::get('weekly-streak', [GoalController::class, 'getWeeklyStreakData']);
     Route::apiResource('check-ins', CheckInController::class);
     Route::apiResource('payments', PaymentController::class);
+    
+    // tips
+    Route::get('tips/today', [TipsController::class, 'getTodayTips']);
+    Route::post('tips/refresh', [TipsController::class, 'refreshTips']);
+    Route::post('tips/{id}/mark-done', [TipsController::class, 'markAsDone']);
+
+    // notifications
+    Route::apiResource('notifications', NotificationController::class)->only(['index', 'show']);
+    Route::post('notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
+    Route::delete('notifications/delete-all', [NotificationController::class, 'deleteAll']);
+    
 });
 
 // this is for admin
@@ -66,6 +82,7 @@ Route::group(['middleware' => ['auth:api', 'is_user']], function ($router) {
 Route::get('system-info', [GeneralSettingController::class, 'getSystemInfo']);
 Route::get('dynamic-pages', [GeneralSettingController::class, 'getDynamicPages']);
 Route::get('dynamic-pages/{page_slug}', [GeneralSettingController::class, 'showDaynamicPage']);
+Route::get('faqs', [GeneralSettingController::class, 'getFaqs']);
 Route::apiResource('packages', PackageController::class)->only(['index', 'show']);
 Route::apiResource('stepper-pages', PublicStepperPageController::class)->only(['index', 'show']);
 

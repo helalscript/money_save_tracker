@@ -37,9 +37,10 @@ class DatabaseSeeder extends Seeder
             'user_name' => 'new_user',
         ]);
         $this->call(SystemSettingSeeder::class);
-        $this->call(TimePackageSeeder::class);
         $this->call(FeatureSeeder::class);
         $this->call(PackageSeeder::class);
-        // $this->call(FaqSeeder::class);
+        $this->call(StepperPageSeeder::class);
+        $this->call(DynamicPageSeeder::class);
+        $this->call(FaqSeeder::class);
     }
 }

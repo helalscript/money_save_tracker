@@ -3,6 +3,7 @@
 namespace App\Services\API\V1\Public;
 
 use App\Models\DynamicPage;
+use App\Models\Faq;
 use App\Models\SystemSetting;
 use Exception;
 use Illuminate\Support\Facades\Auth;
@@ -61,6 +62,20 @@ class GeneralSettingService
             return $dynamicPage;
         } catch (Exception $e) {
             Log::error('GeneralSettingService::showDaynamicPage'.$e->getMessage());
+            throw $e;
+        }
+    }
+
+    public function getFaqs($request)
+    {
+        try {
+            $perPage = $request->per_page ?? 25;
+            $faqs = Faq::select('id', 'question', 'answer')
+                ->paginate($perPage);
+            return $faqs;
+
+        } catch (Exception $e) {
+            Log::error('GeneralSettingService::getFaqs'.$e->getMessage());
             throw $e;
         }
     }
