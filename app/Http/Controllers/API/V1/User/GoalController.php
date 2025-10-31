@@ -4,6 +4,7 @@ namespace App\Http\Controllers\API\V1\User;
 
 use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
+use App\Http\Resources\API\V1\GoalResource;
 use App\Services\API\V1\User\GoalService;
 use Exception;
 use Illuminate\Http\Request;
@@ -28,7 +29,7 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Goals fetched successfully', 200, $goals, true);
         } catch (Exception $e) {
-            Log::error('GoalController::index'.$e->getMessage());
+            Log::error('GoalController::index' . $e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -57,7 +58,7 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Goal created successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::store'.$e->getMessage());
+            Log::error('GoalController::store' . $e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -73,7 +74,7 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Goal fetched successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::show'.$e->getMessage());
+            Log::error('GoalController::show' . $e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -96,13 +97,13 @@ class GoalController extends Controller
             'daily_target' => 'nullable|numeric|min:0',
             'status' => 'nullable|string|in:active,inactive,completed',
         ]);
-        
+
         try {
             $goal = $this->goalService->update($id, $validateData);
 
             return Helper::jsonResponse(true, 'Goal updated successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::update'.$e->getMessage());
+            Log::error('GoalController::update' . $e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -117,7 +118,32 @@ class GoalController extends Controller
             $goal = $this->goalService->destroy($id);
             return Helper::jsonResponse(true, 'Goal deleted successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::destroy'.$e->getMessage());
+            Log::error('GoalController::destroy' . $e->getMessage());
+            return Helper::jsonErrorResponse($e->getMessage(), 500);
+        }
+    }
+
+    public function getActiveGoal()
+    {
+        try {
+            $goal = $this->goalService->getActiveGoal();
+
+            return Helper::jsonResponse(true, 'Active Goal fetched successfully', 200, GoalResource::make($goal));
+        } catch (Exception $e) {
+            Log::error('GoalController::getActiveGoal' . $e->getMessage());
+
+            return Helper::jsonErrorResponse($e->getMessage(), 500);
+        }
+    }
+    public function getWeeklyStreakData()
+    {
+        try {
+            $streakData = $this->goalService->getWeeklyStreakData();
+
+            return Helper::jsonResponse(true, 'Weekly Streak Data fetched successfully', 200, $streakData);
+        } catch (Exception $e) {
+            Log::error('GoalController::getWeeklyStreakData' . $e->getMessage());
+
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
     }

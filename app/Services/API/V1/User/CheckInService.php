@@ -27,10 +27,10 @@ class CheckInService
         try {
             $perPage = $request->per_page ?? 25;
 
-            $checkIns = CheckIn::whereHas('goal', function($query) {
-                    $query->where('user_id', $this->user->id);
-                })
-                ->with(['goal:id,title,goal_type,target_amount,status'])
+            $checkIns = CheckIn::whereHas('goal', function ($query) {
+                $query->where('user_id', $this->user->id);
+            })
+                ->with(['goal'])
                 ->orderBy('check_date', 'desc')
                 ->paginate($perPage);
 
@@ -51,17 +51,20 @@ class CheckInService
     {
         try {
             // Verify the goal belongs to the authenticated user
-            $goal = Goal::where('id', $validatedData['goal_id'])
-                ->where('user_id', $this->user->id)
+            $goal = Goal::where('user_id', $this->user->id)
+                ->where('status', 'active')
                 ->first();
 
             if (!$goal) {
                 throw new Exception('Goal not found or does not belong to you');
             }
-            
+            $validatedData['goal_id'] = $goal->id;
+            $validatedData['check_date'] = now();
+            $validatedData['status'] = 'completed';
+            // dd( $validatedData);
             $checkIn = CheckIn::create($validatedData);
-            
-            $checkIn->load(['goal:id,title,goal_type,target_amount,status']);
+
+            // $checkIn->load(['goal:id,title,goal_type,target_amount,status']);
 
             return $checkIn;
         } catch (Exception $e) {
@@ -79,10 +82,10 @@ class CheckInService
     public function show(int $id)
     {
         try {
-            $checkIn = CheckIn::whereHas('goal', function($query) {
-                    $query->where('user_id', $this->user->id);
-                })
-                ->with(['goal:id,title,goal_type,target_amount,status'])
+            $checkIn = CheckIn::whereHas('goal', function ($query) {
+                $query->where('user_id', $this->user->id);
+            })
+                ->with(['goal'])
                 ->find($id);
 
             if (!$checkIn) {
@@ -106,9 +109,9 @@ class CheckInService
     public function update(int $id, array $validatedData)
     {
         try {
-            $checkIn = CheckIn::whereHas('goal', function($query) {
-                    $query->where('user_id', $this->user->id);
-                })
+            $checkIn = CheckIn::whereHas('goal', function ($query) {
+                $query->where('user_id', $this->user->id);
+            })
                 ->find($id);
 
             if (!$checkIn) {
@@ -127,8 +130,8 @@ class CheckInService
             }
 
             $checkIn->update($validatedData);
-            
-            $checkIn->load(['goal:id,title,goal_type,target_amount,status']);
+
+            $checkIn->load(['goal']);
 
             return $checkIn;
         } catch (Exception $e) {
@@ -146,9 +149,9 @@ class CheckInService
     public function destroy(int $id)
     {
         try {
-            $checkIn = CheckIn::whereHas('goal', function($query) {
-                    $query->where('user_id', $this->user->id);
-                })
+            $checkIn = CheckIn::whereHas('goal', function ($query) {
+                $query->where('user_id', $this->user->id);
+            })
                 ->find($id);
 
             if (!$checkIn) {

@@ -40,12 +40,12 @@ class CheckInController extends Controller
     public function store(Request $request)
     {
         $validateData = $request->validate([
-            'goal_id' => 'required|integer|exists:goals,id',
+            // 'goal_id' => 'required|integer|exists:goals,id',
             'amount_spending' => 'nullable|numeric|min:0',
             'amount_saved' => 'nullable|numeric|min:0',
-            'target_amount' => 'nullable|numeric|min:0',
-            'check_date' => 'required|date',
-            'status' => 'nullable|string|in:completed,pending,cancelled',
+            // 'target_amount' => 'nullable|numeric|min:0',
+            // 'check_date' => 'required|date',
+            // 'status' => 'nullable|string|in:completed,pending,cancelled',
         ]);
         
         try {
