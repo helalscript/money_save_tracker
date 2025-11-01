@@ -189,6 +189,7 @@ class GoalService
 
         // Total saved amount from checking table
         $savedAmount = $goal->checkIns()->sum('amount_saved');
+        $spendingAmount = $goal->checkIns()->sum('amount_spending');
 
         // Remaining amount
         $remainingAmount = $goal->target_amount - $savedAmount;
@@ -214,6 +215,7 @@ class GoalService
             'original_end_date' => $originalEndDate->toDateString(),
             'new_end_date' => $newEndDate->toDateString(),
             'saved_amount' => $savedAmount,
+            'spending_amount' => $spendingAmount,
             'remaining_amount' => $remainingAmount,
             'daily_target' => number_format($dailyTarget, 2),
             'deadline_indicator' => $goal->deadline_indicator ?? 'green',
@@ -285,18 +287,19 @@ class GoalService
     public function getActiveGoal()
     {
         try {
-            $goal = Goal::where([
-                'user_id' => $this->user->id,
-                'status' => 'active',
-            ])->with([
-                        'checkIns' => function ($query) {
-                            $query->orderBy('check_date', 'desc');
-                        }
-                    ])
-                ->first();
-            if (!$goal) {
-                throw new Exception('Goal not found or does not belong to you');
-            }
+            // $goal = Goal::where([
+            //     'user_id' => $this->user->id,
+            //     'status' => 'active',
+            // ])->with([
+            //             'checkIns' => function ($query) {
+            //                 $query->orderBy('check_date', 'desc');
+            //             }
+            //         ])
+            //     ->first();
+            // if (!$goal) {
+            //     throw new Exception('Goal not found or does not belong to you');
+            // }
+            $goal = $this->nowActiveGoal();
             $goal['current_streak'] = $this->calculateStreak($goal);
             $goal['others_data'] = $this->calculateNewEndDate($goal);
             return $goal;
@@ -358,5 +361,54 @@ class GoalService
             'week_range' => $startOfWeek->format('M d') . ' - ' . $endOfWeek->format('M d'),
             'weekly_checkins' => $weeklyData,
         ];
+    }
+
+    public function bestDaySaving()
+    {
+        try {
+            // Implementation for best day saving
+            $goal = $this->nowActiveGoal();
+            $bestDay = $goal->checkIns()->max('amount_saved');
+            return $bestDay;
+        } catch (Exception $e) {
+            Log::error("GoalService::bestDaySaving" . $e->getMessage());
+            throw $e;
+        }
+    }
+    public function dailyAverageSaving()
+    {
+        // Implementation for daily average saving
+        try {
+            $goal = $this->nowActiveGoal();
+            $totalSaved = $goal->checkIns()->sum('amount_saved');
+            $totalDays = $goal->checkIns()->count();
+
+            if ($totalDays === 0) {
+                return 0;
+            }
+
+            $averageSaving = $totalSaved / $totalDays;
+            return $averageSaving;
+        } catch (Exception $e) {
+            Log::error("GoalService::dailyAverageSaving" . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    public function nowActiveGoal()
+    {
+        $goal = Goal::where([
+            'user_id' => $this->user->id,
+            'status' => 'active',
+        ])->with([
+                    'checkIns' => function ($query) {
+                        $query->orderBy('check_date', 'desc');
+                    }
+                ])
+            ->first();
+        if (!$goal) {
+            throw new Exception('Goal not found or does not belong to you');
+        }
+        return $goal;
     }
 }
