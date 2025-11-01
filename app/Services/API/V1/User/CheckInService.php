@@ -59,6 +59,7 @@ class CheckInService
                 throw new Exception('Goal not found or does not belong to you');
             }
             $validatedData['goal_id'] = $goal->id;
+            $validatedData['target_amount'] = $goal->daily_target ?? 0;
             $validatedData['check_date'] = now();
             $validatedData['status'] = 'completed';
             // dd( $validatedData);
@@ -165,5 +166,163 @@ class CheckInService
             Log::error("CheckInService::destroy" . $e->getMessage());
             throw $e;
         }
+    }
+
+    public function checkInsActivity($request)
+    {
+        try {
+            $groupBy = $request->group_by ?? 'daily'; // daily, weekly, monthly
+            $perPage = $request->per_page ?? 25;
+
+            $checkIns = CheckIn::whereHas('goal', function ($query) {
+                $query->where('user_id', $this->user->id);
+            })
+                ->with(['goal'])
+                ->orderBy('check_date', 'desc')
+                ->get();
+
+            // Group the data based on the grouping type
+            $groupedData = $this->groupCheckIns($checkIns, $groupBy);
+            // return $groupedData;
+            // Convert to paginated format if needed
+            $currentPage = $request->page ?? 1;
+            $items = array_slice($groupedData, ($currentPage - 1) * $perPage, $perPage);
+
+            return [
+                'status' => true,
+                'message' => 'Check-in activity fetched successfully',
+                'code' => 200,
+                // 'group_by' => $groupBy,
+                'data' => $items,
+                'pagination' => [
+                    'current_page' => $currentPage,
+                    'last_page' => ceil(count($groupedData) / $perPage),
+                    'per_page' => $perPage,
+                    'total' => count($groupedData),
+                    'first_page_url' => url()->current() . '?page=1&per_page=' . $perPage . '&group_by=' . $groupBy,
+                    'last_page_url' => url()->current() . '?page=' . ceil(count($groupedData) / $perPage) . '&per_page=' . $perPage . '&group_by=' . $groupBy,
+                    'next_page_url' => url()->current() . '?page=' . ($currentPage + 1) . '&per_page=' . $perPage . '&group_by=' . $groupBy,
+                    'prev_page_url' => url()->current() . '?page=' . ($currentPage - 1) . '&per_page=' . $perPage . '&group_by=' . $groupBy,
+                    'from' => ($currentPage - 1) * $perPage + 1,
+                    'to' => min($currentPage * $perPage, count($groupedData)),
+                    'path' => url()->current(),
+                ],
+            ];
+        } catch (Exception $e) {
+            Log::error("CheckInService::index: " . $e->getMessage());
+            throw $e;
+        }
+    }
+
+    private function groupCheckIns($checkIns, $groupBy)
+    {
+        $grouped = [];
+
+        switch ($groupBy) {
+            case 'weekly':
+                $grouped = $this->groupByWeek($checkIns);
+                break;
+            case 'monthly':
+                $grouped = $this->groupByMonth($checkIns);
+                break;
+            case 'daily':
+            default:
+                $grouped = $this->groupByDay($checkIns);
+                break;
+        }
+
+        return $grouped;
+    }
+
+    private function groupByDay($checkIns)
+    {
+        $dailyData = [];
+
+        foreach ($checkIns as $checkIn) {
+            $date = $checkIn->check_date->format('Y-m-d');
+            $dayName = $checkIn->check_date->format('D'); // Sat, Sun, Mon
+
+            if (!isset($dailyData[$date])) {
+                $dailyData[$date] = [
+                    'date' => $date,
+                    'day_name' => $dayName,
+                    'amount_saved' => 0,
+                    'amount_spending' => 0,
+                    'amount_saved_target' => 0,
+                    // 'check_ins' => [],
+                ];
+            }
+
+            $dailyData[$date]['amount_saved'] += (float) $checkIn->amount_saved;
+            $dailyData[$date]['amount_spending'] += (float) $checkIn->amount_spending;
+            $dailyData[$date]['amount_saved_target'] += (float) $checkIn->target_amount;
+            // $dailyData[$date]['check_ins'][] = $checkIn;
+        }
+
+        return array_values($dailyData);
+    }
+
+    private function groupByWeek($checkIns)
+    {
+        $weeklyData = [];
+
+        foreach ($checkIns as $checkIn) {
+            $year = $checkIn->check_date->format('Y');
+            $week = $checkIn->check_date->format('W');
+            $key = $year . '-W' . $week;
+
+            if (!isset($weeklyData[$key])) {
+                $weeklyData[$key] = [
+                    'week' => 'Week ' . (int) $week,
+                    'year' => $year,
+                    'week_number' => (int) $week,
+                    'week_key' => $key,
+                    'start_date' => $checkIn->check_date->startOfWeek()->format('Y-m-d'),
+                    'end_date' => $checkIn->check_date->endOfWeek()->format('Y-m-d'),
+                    'amount_saved' => 0,
+                    'amount_spending' => 0,
+                    'amount_saved_target' => 0,
+                    // 'check_ins' => [],
+                ];
+            }
+
+            $weeklyData[$key]['amount_saved'] += (float) $checkIn->amount_saved;
+            $weeklyData[$key]['amount_spending'] += (float) $checkIn->amount_spending;
+            $weeklyData[$key]['amount_saved_target'] += (float) $checkIn->target_amount;
+            // $weeklyData[$key]['check_ins'][] = $checkIn;
+        }
+
+        return array_values($weeklyData);
+    }
+
+    private function groupByMonth($checkIns)
+    {
+        $monthlyData = [];
+
+        foreach ($checkIns as $checkIn) {
+            $monthKey = $checkIn->check_date->format('Y-m');
+            // $monthName = $checkIn->check_date->format('F Y'); // January 2025
+            $monthName = $checkIn->check_date->format('F'); // January 2025
+
+            if (!isset($monthlyData[$monthKey])) {
+                $monthlyData[$monthKey] = [
+                    'month' => $monthName,
+                    'month_key' => $monthKey,
+                    'year' => $checkIn->check_date->format('Y'),
+                    'month_number' => $checkIn->check_date->format('m'),
+                    'amount_saved' => 0,
+                    'amount_spending' => 0,
+                    'amount_saved_target' => 0,
+                    // 'check_ins' => [],
+                ];
+            }
+
+            $monthlyData[$monthKey]['amount_saved'] += (float) $checkIn->amount_saved;
+            $monthlyData[$monthKey]['amount_spending'] += (float) $checkIn->amount_spending;
+            $monthlyData[$monthKey]['amount_saved_target'] += (float) $checkIn->target_amount;
+            // $monthlyData[$monthKey]['check_ins'][] = $checkIn;
+        }
+
+        return array_values($monthlyData);
     }
 }
