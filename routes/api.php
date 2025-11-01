@@ -14,6 +14,7 @@ use App\Http\Controllers\API\V1\User\CheckInController;
 use App\Http\Controllers\API\V1\User\GoalController;
 use App\Http\Controllers\API\V1\User\NotificationController;
 use App\Http\Controllers\API\V1\User\PaymentController;
+use App\Http\Controllers\API\V1\User\ProgressPageController;
 use App\Http\Controllers\API\V1\User\TipsController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
@@ -23,7 +24,7 @@ use Illuminate\Support\Facades\Route;
 // })->middleware('auth');
 
 Route::group(['middleware' => ['guest:api']], function ($router) {
-// Route::group(['middleware' => ['guest:api', 'throttle:2,1']], function ($router) {
+    // Route::group(['middleware' => ['guest:api', 'throttle:2,1']], function ($router) {
     // register
     Route::post('register', [RegisterController::class, 'register']);
     Route::post('/verify-email', [RegisterController::class, 'VerifyEmail']);
@@ -52,18 +53,22 @@ Route::group(['middleware' => ['auth:api', 'is_user']], function ($router) {
     Route::get('active-goal', [GoalController::class, 'getActiveGoal']);
     Route::get('weekly-streak', [GoalController::class, 'getWeeklyStreakData']);
     Route::apiResource('check-ins', CheckInController::class);
+    Route::get('check-ins-activity', [CheckInController::class, 'checkInsActivity']);
     Route::apiResource('payments', PaymentController::class);
-    
+
     // tips
     Route::get('tips/today', [TipsController::class, 'getTodayTips']);
     Route::post('tips/refresh', [TipsController::class, 'refreshTips']);
     Route::post('tips/{id}/mark-done', [TipsController::class, 'markAsDone']);
+    //progress page
+    Route::get('progress-page', [ProgressPageController::class, 'index']);
+    Route::get('progress-page/ai-insights', [ProgressPageController::class, 'aiInsights']);
 
     // notifications
     Route::apiResource('notifications', NotificationController::class)->only(['index', 'show']);
     Route::post('notifications/mark-all-as-read', [NotificationController::class, 'markAllAsRead']);
     Route::delete('notifications/delete-all', [NotificationController::class, 'deleteAll']);
-    
+
 });
 
 // this is for admin
