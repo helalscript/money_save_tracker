@@ -23,7 +23,7 @@ class ProgressPageService
     {
         try {
             $activeGoal = $this->goalService->getActiveGoal();
-            // dd($activeGoal);
+            
             $journey = [
                 'total_saved' => $activeGoal ? number_format($activeGoal['others_data']['saved_amount']) : 0, //$activeGoal['others_data']['saved_amount'] : 0,
                 'total_spending' => $activeGoal ? number_format($activeGoal['others_data']['spending_amount']) : 0,
@@ -34,7 +34,6 @@ class ProgressPageService
             $daily_average_saving = number_format($this->goalService->dailyAverageSaving() ?? 0);
             $steak_record = $activeGoal ? $activeGoal['current_streak'] : 0;
             $meeting_daily_target = 'On-Track';
-            $check_ins_activity = '';
 
             $data = [
                 'journey' => $journey,
@@ -42,7 +41,6 @@ class ProgressPageService
                 'daily_average_saving' => $daily_average_saving,
                 'steak_record' => $steak_record,
                 'meeting_daily_target' => $meeting_daily_target,
-                // 'check_ins_activity' => $check_ins_activity,
             ];
             return $data;
 
@@ -57,10 +55,9 @@ class ProgressPageService
     {
         try {
             $ai_insights = 
-                " 'Your weekend savings improved by 40% this month',
+                "'Your weekend savings improved by 40% this month',
                 'You are saving 15% above your daily target',
-                'Best saving time: Thursday afternoons',"
-            ;
+                'Best saving time: Thursday afternoons',";
             return $ai_insights;
         } catch (Exception $e) {
             Log::error("ProgressPageService::aiInsights" . $e->getMessage());
