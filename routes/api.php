@@ -52,7 +52,7 @@ Route::group(['middleware' => ['auth:api', 'is_user']], function ($router) {
     Route::apiResource('goals', GoalController::class);
     Route::get('active-goal', [GoalController::class, 'getActiveGoal']);
     Route::get('weekly-streak', [GoalController::class, 'getWeeklyStreakData']);
-    Route::apiResource('check-ins', CheckInController::class);
+    Route::apiResource('check-ins', CheckInController::class)->except(['update', 'destroy']);
     Route::get('check-ins-activity', [CheckInController::class, 'checkInsActivity']);
     Route::apiResource('payments', PaymentController::class);
 
