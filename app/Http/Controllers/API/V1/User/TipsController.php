@@ -28,8 +28,8 @@ class TipsController extends Controller
             $tips = $this->tipsService->getDailyTips();
             return Helper::jsonResponse(true, 'Tips fetched successfully', 200, $tips);
         } catch (Exception $e) {
-            Log::error('TipsController::getTodayTips' . $e->getMessage());
-            return Helper::jsonErrorResponse($e->getMessage(), 500);
+            Log::error('TipsController::getTodayTips' . $e->getMessage().' Line: '.$e->getLine());
+            return Helper::jsonErrorResponse($e->getMessage(), $e->getCode() ?: 500);
         }
     }
 
@@ -82,8 +82,11 @@ class TipsController extends Controller
             $tips = $this->tipsService->refreshTips();
             return Helper::jsonResponse(true, 'Tips refreshed successfully', 200, $tips);
         } catch (Exception $e) {
+            if($e->getCode() == 200){
+                return Helper::jsonResponse(true, $e->getMessage(), 200, []);
+            }
             Log::error('TipsController::refreshTips' . $e->getMessage());
-            return Helper::jsonErrorResponse($e->getMessage(), 500);
+            return Helper::jsonErrorResponse($e->getMessage(), $e->getCode() ?: 500);
         }
     }
 }

@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Web\Admin;
 
+
+use App\Facades\DataTable;
 use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
 use App\Models\StepperPage;
@@ -22,10 +24,10 @@ class StepperPageController extends Controller
         $query = StepperPage::query();
         if ($search) {
             $query->where('title', 'like', "%{$search}%")
-                  ->orWhere('description', 'like', "%{$search}%");
+                ->orWhere('description', 'like', "%{$search}%");
         }
 
-        $pages = $query->orderBy('order_no')->paginate($perPage)->withQueryString();
+        $pages = $query->orderBy('order_no')->paginate($perPage);
         // return Inertia::render('dashboard', [
         //     'pages' => $pages,
         //     'filters' => [
@@ -33,6 +35,7 @@ class StepperPageController extends Controller
         //         'per_page' => $perPage,
         //     ],
         // ]);
+        // dd($pages->toArray());
         return Inertia::render('admin/stepper-pages/index', [
             'pages' => $pages,
             'filters' => [
@@ -110,5 +113,29 @@ class StepperPageController extends Controller
         $page->status = $page->status === 'active' ? 'inactive' : 'active';
         $page->save();
         return back()->with('success', 'Status updated.');
+    }
+
+    public function newIndex(Request $request): Response
+    {
+        $sort = str_replace(
+            ['name'],
+            ['name'],
+            request()->query('col')
+        );
+
+        $result = DataTable::query(StepperPage::query())
+            ->searchable(['name'])
+            ->applySort($sort)
+            ->allowedSorts(['name'])
+            ->make();
+
+
+        return Inertia::render('admin/stepper-pages/partials/index', [
+            'pages' => $result,
+            // 'filters' => [
+            //     'search' => $search,
+            //     'per_page' => $perPage,
+            // ],
+        ]);
     }
 }

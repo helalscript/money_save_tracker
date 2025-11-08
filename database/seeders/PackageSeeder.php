@@ -23,7 +23,7 @@ class PackageSeeder extends Seeder
             'price_offer' => null,
             'free_trail_day' => 7,
             'description' => 'Get the full power of AI-driven financial coaching.',
-            'image' => 'pro-package.png',
+            'image' => 'uploads/packages/pro-package.png',
             'status' => 'active',
         ]); 
 
@@ -35,7 +35,7 @@ class PackageSeeder extends Seeder
             'price_offer' => null,
             'free_trail_day' => 7,
             'description' => 'Get the full power of AI-driven financial coaching.',
-            'image' => 'premium-package.png',
+            'image' => 'uploads/packages/premium-package.png',
             'status' => 'active',
         ]);
 

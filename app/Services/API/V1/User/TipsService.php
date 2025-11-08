@@ -79,7 +79,7 @@ class TipsService
             //in future change to get multiple tips with subcription plan
             // If user already has 3 tips for today, return them
             if ($todayTips->count() >= 3) {
-                throw new Exception('User already has 3 tips for today');
+                throw new Exception('User already has 3 tips for today',200);
             }
             // Get tips user hasn't received yet
             $excludeTipIds = UserTip::where('user_id', $this->user->id)
@@ -96,7 +96,7 @@ class TipsService
             // Get 1 random tips
             $newTips = $query->inRandomOrder()->first();
             if (!$newTips) {
-                throw new Exception('No new tips available');
+                throw new Exception('No new tips available',200);
             }
             // Create user_tips records
             $userTip = UserTip::create([

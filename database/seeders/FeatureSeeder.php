@@ -17,7 +17,7 @@ class FeatureSeeder extends Seeder
             [
                 'title' => 'Unlimited AI Tips',
                 'description' => 'Get unlimited AI-powered financial tips and recommendations to improve your money management skills.',
-                'image' => null,
+                'image' => 'uploads/features/1.png',
                 'access_level' => 'unlimited',
                 'custom_tag' => null,
                 'custom_value' => null,
@@ -26,7 +26,7 @@ class FeatureSeeder extends Seeder
             [
                 'title' => 'Multi Goal Tracking',
                 'description' => 'Track multiple financial goals simultaneously with detailed progress monitoring and insights.',
-                'image' => null,
+                'image' => 'uploads/features/2.png',
                 'access_level' => 'unlimited',
                 'custom_tag' => null,
                 'custom_value' => null,
@@ -35,7 +35,7 @@ class FeatureSeeder extends Seeder
             [
                 'title' => 'Deeper Insight & Forecasts',
                 'description' => 'Get advanced financial insights and forecasts to make better investment and saving decisions.',
-                'image' => null,
+                'image' => 'uploads/features/3.png',
                 'access_level' => 'unlimited',
                 'custom_tag' => null,
                 'custom_value' => null,
