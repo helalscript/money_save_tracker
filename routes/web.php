@@ -21,6 +21,7 @@ Route::middleware(['auth', 'role_check'])->group(function () {
     Route::prefix('admin')->name('admin.')->group(function () {
         Route::resource('stepper-pages', StepperPageController::class);
         Route::patch('stepper-pages/{stepper_page}/toggle', [StepperPageController::class, 'toggleStatus'])->name('stepper-pages.toggle');
+        Route::get('stepper-data', [StepperPageController::class, 'newIndex'])->name('stepper-data');
     });
 });
 

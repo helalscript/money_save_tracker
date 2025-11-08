@@ -28,7 +28,7 @@ class CheckInController extends Controller
 
             return Helper::jsonResponse(true, 'Check-ins fetched successfully', 200, $checkIns, true);
         } catch (Exception $e) {
-            Log::error('CheckInController::index'.$e->getMessage());
+            Log::error('CheckInController::index' . $e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -47,13 +47,13 @@ class CheckInController extends Controller
             // 'check_date' => 'required|date',
             // 'status' => 'nullable|string|in:completed,pending,cancelled',
         ]);
-        
+
         try {
             $checkIn = $this->checkInService->store($validateData);
 
             return Helper::jsonResponse(true, 'Check-in created successfully', 200, $checkIn);
         } catch (Exception $e) {
-            Log::error('CheckInController::store'.$e->getMessage());
+            Log::error('CheckInController::store' . $e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -69,7 +69,7 @@ class CheckInController extends Controller
 
             return Helper::jsonResponse(true, 'Check-in fetched successfully', 200, $checkIn);
         } catch (Exception $e) {
-            Log::error('CheckInController::show'.$e->getMessage());
+            Log::error('CheckInController::show' . $e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -88,13 +88,13 @@ class CheckInController extends Controller
             'check_date' => 'required|date',
             'status' => 'nullable|string|in:completed,pending,cancelled',
         ]);
-        
+
         try {
             $checkIn = $this->checkInService->update($id, $validateData);
 
             return Helper::jsonResponse(true, 'Check-in updated successfully', 200, $checkIn);
         } catch (Exception $e) {
-            Log::error('CheckInController::update'.$e->getMessage());
+            Log::error('CheckInController::update' . $e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -109,7 +109,21 @@ class CheckInController extends Controller
             $checkIn = $this->checkInService->destroy($id);
             return Helper::jsonResponse(true, 'Check-in deleted successfully', 200, $checkIn);
         } catch (Exception $e) {
-            Log::error('CheckInController::destroy'.$e->getMessage());
+            Log::error('CheckInController::destroy' . $e->getMessage());
+            return Helper::jsonErrorResponse($e->getMessage(), 500);
+        }
+    }
+
+    public function checkInsActivity(Request $request)
+    {
+        try {
+            $checkIns = $this->checkInService->checkInsActivity($request);
+
+            // return Helper::jsonResponse(true, 'Check-ins fetched successfully', 200, $checkIns);
+            return $checkIns;
+        } catch (Exception $e) {
+            Log::error('CheckInController::index' . $e->getMessage());
+
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
     }
