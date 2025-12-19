@@ -34,6 +34,7 @@ class UserController extends Controller
      */
     public function updateProfile(Request $request)
     {
+        // dd($request->all());
         $validatedData = $request->validate([
             'name' => 'required|string|max:100',
             'avatar' => 'nullable|image|mimes:jpeg,png,jpg,gif|max:10240',
@@ -42,7 +43,11 @@ class UserController extends Controller
             'password' => 'nullable|string|min:6|confirmed',
             'gender' => 'nullable|in:male,female,others',
             'brithdate' => 'nullable|date|date_format:Y-m-d|before:today',
+        ], [
+            'avatar.max' => 'The avatar may not be greater than 10 MB.',
+            'avatar.mimes' => 'The avatar must be a file of type: jpeg, png, jpg, gif.',
         ]);
+
         try {
             if (!empty($validatedData['password'])) {
                 $validatedData['password'] = bcrypt($validatedData['password']);
