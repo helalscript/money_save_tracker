@@ -38,8 +38,8 @@ class RegisterController extends Controller
         ]);
 
         try {
-            $otp = 1234; // For testing purposes, you can use a fixed OTP. In production, generate a random OTP.
-            // $otp = rand(1000, 9999);
+            // $otp = 1234; // For testing purposes, you can use a fixed OTP. In production, generate a random OTP.
+            $otp = rand(1000, 9999);
             $otpExpiresAt = Carbon::now()->addMinutes(60); // 1 hour
 
             // Check for soft-deleted user
@@ -83,7 +83,7 @@ class RegisterController extends Controller
                 $user = User::create($userData);
             }
 
-            // Mail::to($user->email)->send(new OtpMail($otp, $user, 'Verify Your Email Address')); // For testing purposes, you can comment this line. In production, uncomment it.
+            Mail::to($user->email)->send(new OtpMail($otp, $user, 'Verify Your Email Address')); // For testing purposes, you can comment this line. In production, uncomment it.
 
             DB::commit();
             return Helper::jsonResponse(true, 'A verification email has been successfully sent to your email address. Please check your inbox to complete the verification.', 200);
@@ -178,8 +178,8 @@ class RegisterController extends Controller
                 return Helper::jsonErrorResponse('Email already verified.', 409);
             }
 
-            // $newOtp = rand(1000, 9999);
-            $newOtp = 1234; // For testing purposes, you can comment this line. In production, uncomment it.
+            $newOtp = rand(1000, 9999);
+            // $newOtp = 1234; // For testing purposes, you can comment this line. In production, uncomment it.
             $otpExpiresAt = Carbon::now()->addMinutes(60);
             $user->otp = $newOtp;
             $user->otp_expires_at = $otpExpiresAt;
@@ -188,7 +188,7 @@ class RegisterController extends Controller
             //* Send the new OTP to the user's email
 
             try {
-                // Mail::to($user->email)->send(new OtpMail($newOtp, $user, 'Verify Your Email Address')); // For testing purposes, you can comment this line. In production, uncomment it.
+                Mail::to($user->email)->send(new OtpMail($newOtp, $user, 'Verify Your Email Address')); // For testing purposes, you can comment this line. In production, uncomment it.
                 return Helper::jsonResponse(true, 'A new OTP has been sent to your email.', 200);
             } catch (Exception $e) {
                 // If email sending fails, delete the created user and return an error message

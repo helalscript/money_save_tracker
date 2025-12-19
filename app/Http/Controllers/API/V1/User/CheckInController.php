@@ -41,8 +41,8 @@ class CheckInController extends Controller
     {
         $validateData = $request->validate([
             // 'goal_id' => 'required|integer|exists:goals,id',
-            'amount_spending' => 'nullable|numeric|min:0',
-            'amount_saved' => 'nullable|numeric|min:0',
+            'amount_spending' => 'nullable|numeric|min:1',
+            'amount_saved' => 'nullable|numeric|min:1',
             // 'target_amount' => 'nullable|numeric|min:0',
             // 'check_date' => 'required|date',
             // 'status' => 'nullable|string|in:completed,pending,cancelled',
