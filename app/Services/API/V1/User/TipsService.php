@@ -2,15 +2,14 @@
 
 namespace App\Services\API\V1\User;
 
-use Exception;
-use Illuminate\Support\Facades\Log;
-use Illuminate\Support\Facades\Auth;
 use App\Models\CheckIn;
-
 use App\Models\Tip;
 use App\Models\UserTip;
-use Carbon\Carbon;
 use App\Services\AI\OpenAIService;
+use Carbon\Carbon;
+use Exception;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\Log;
 
 class TipsService
 {
@@ -20,6 +19,7 @@ class TipsService
     {
         $this->user = Auth::user();
     }
+
     /**
      * Get daily tips for a user (3 tips per day)
      */
@@ -41,7 +41,7 @@ class TipsService
 
             return $todayTip;
         } catch (Exception $e) {
-            Log::error("TipsService::getDailyTips" . $e->getMessage());
+            Log::error('TipsService::getDailyTips'.$e->getMessage());
             throw $e;
         }
     }
@@ -62,7 +62,7 @@ class TipsService
 
             return $userTip;
         } catch (Exception $e) {
-            Log::error("TipsService::markAsDone" . $e->getMessage());
+            Log::error('TipsService::markAsDone'.$e->getMessage());
             throw $e;
         }
     }
@@ -71,13 +71,21 @@ class TipsService
     {
         try {
             $today = Carbon::today();
+            // count the number of tips for the user per day
+            $numberOfTips = UserTip::where('user_id', $this->user->id)
+                ->whereDate('created_at', $today)
+                ->count();
 
+            if ($numberOfTips >= 3) {
+                throw new Exception('You have reached the maximum number of tips for today',200);
+            }
             // Last tip text for today (if any) so refresh can ask AI for something different.
             $lastTodayTip = UserTip::where('user_id', $this->user->id)
                 ->whereDate('created_at', $today)
                 ->latest()
                 ->with('tip')
                 ->first();
+
             $previousTipText = $lastTodayTip && $lastTodayTip->tip ? $lastTodayTip->tip->text : null;
 
             // Build AI context from the active goal and today's spending.
@@ -123,11 +131,11 @@ class TipsService
                 'status' => 'pending',
             ]);
             $userTip->load('tip');
+
             return $userTip;
         } catch (Exception $e) {
-            Log::error("TipsService::refreshTips" . $e->getMessage());
+            Log::error('TipsService::refreshTips'.$e->getMessage());
             throw $e;
         }
     }
-
 }
