@@ -41,11 +41,13 @@ class GoalController extends Controller
     public function store(Request $request)
     {
         $validateData = $request->validate([
-            'monthly_income' => 'nullable|numeric|min:0',
+            // New simplified onboarding: income (required), total budget, end date.
+            'monthly_income' => 'required|numeric|min:0',
             'fixed_expense' => 'nullable|numeric|min:0',
             'alredy_saved' => 'nullable|numeric|min:0',
             'debt_blance' => 'nullable|numeric|min:0',
-            'goal_type' => 'required|string|in:save_money,paying_debt',
+            // We no longer ask the user for goal type; keep it optional for backward compatibility.
+            'goal_type' => 'nullable|string|in:save_money,paying_debt',
             'target_amount' => 'required|numeric|min:0',
             // 'start_date' => 'required|date|date_format:Y-m-d|before:end_date|after_or_equal:today',
             'end_date' => 'required|date|date_format:Y-m-d|after:today',

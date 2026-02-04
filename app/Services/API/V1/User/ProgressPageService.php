@@ -5,12 +5,14 @@ namespace App\Services\API\V1\User;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use App\Models\CheckIn;
+use App\Services\AI\OpenAIService;
 
 class ProgressPageService
 {
     protected $user;
 
-    public function __construct(protected GoalService $goalService)
+    public function __construct(protected GoalService $goalService, protected OpenAIService $openAIService)
     {
         $this->user = Auth::user();
     }
@@ -25,9 +27,11 @@ class ProgressPageService
             $activeGoal = $this->goalService->getActiveGoal();
             
             $journey = [
-                'total_saved' => $activeGoal ? number_format($activeGoal['others_data']['saved_amount']) : 0, //$activeGoal['others_data']['saved_amount'] : 0,
+                // Savings are no longer the core metric; expose spending journey.
+                'total_saved' => 0,
                 'total_spending' => $activeGoal ? number_format($activeGoal['others_data']['spending_amount']) : 0,
                 'goal_target' => $activeGoal ? number_format($activeGoal['target_amount']) : 0,
+                // This now represents percentage of the budget that has been used.
                 'progress_percentage' => $activeGoal ? $activeGoal['others_data']['persantage_progress'] : 0,
             ];
             $best_day_saving = number_format($this->goalService->bestDaySaving() ?? 0);
@@ -54,11 +58,40 @@ class ProgressPageService
     public function aiInsights()
     {
         try {
-            $ai_insights = 
-                "'Your weekend savings improved by 40% this month',
-                'You are saving 15% above your daily target',
-                'Best saving time: Thursday afternoons',";
-            return $ai_insights;
+            $goal = $this->goalService->getActiveGoal();
+
+            $journey = $goal['others_data'] ?? [];
+
+            // Collect recent spending (last 14 days) for richer context.
+            $recentCheckIns = CheckIn::whereHas('goal', function ($query) {
+                $query->where('user_id', $this->user->id)
+                    ->where('status', 'active');
+            })
+                ->whereDate('check_date', '>=', now()->subDays(14))
+                ->orderBy('check_date', 'asc')
+                ->get()
+                ->groupBy(fn ($checkIn) => $checkIn->check_date->toDateString())
+                ->map(function ($dayGroup) {
+                    return [
+                        'date' => $dayGroup->first()->check_date->toDateString(),
+                        'total_spent' => (float) $dayGroup->sum('amount_spending'),
+                        'daily_limit' => (float) $dayGroup->first()->target_amount,
+                    ];
+                })
+                ->values()
+                ->all();
+
+            $context = [
+                'goal_target' => (float) ($goal['target_amount'] ?? 0),
+                'total_spending' => (float) ($journey['spending_amount'] ?? 0),
+                'remaining_budget' => (float) ($journey['remaining_amount'] ?? 0),
+                'daily_limit' => (float) ($journey['daily_target'] ?? 0),
+                'days_remaining' => (int) ($journey['needed_days'] ?? 0),
+                'current_streak' => (int) ($goal['current_streak'] ?? 0),
+                'recent_days' => $recentCheckIns,
+            ];
+
+            return $this->openAIService->generateInsights($context);
         } catch (Exception $e) {
             Log::error("ProgressPageService::aiInsights" . $e->getMessage());
             throw $e;

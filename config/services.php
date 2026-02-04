@@ -34,5 +34,9 @@ return [
             'channel' => env('SLACK_BOT_USER_DEFAULT_CHANNEL'),
         ],
     ],
+    'openai' => [
+        'api_key' => env('OPEN_AI_API_KEY'),
+        'api_url' => env('OPEN_AI_API_URL','https://api.openai.com/v1'),
+    ],
 
 ];
