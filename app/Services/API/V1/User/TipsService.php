@@ -5,17 +5,18 @@ namespace App\Services\API\V1\User;
 use Exception;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
+use App\Models\CheckIn;
 
 use App\Models\Tip;
 use App\Models\UserTip;
 use Carbon\Carbon;
-use Illuminate\Support\Facades\DB;
+use App\Services\AI\OpenAIService;
 
 class TipsService
 {
     protected $user;
 
-    public function __construct()
+    public function __construct(protected GoalService $goalService, protected OpenAIService $openAIService)
     {
         $this->user = Auth::user();
     }
@@ -27,17 +28,18 @@ class TipsService
         try {
             $today = Carbon::today();
 
-            // Check if user already has tips for today
-            $todayTips = UserTip::where('user_id', $this->user->id)
+            // Check if user already has a tip for today
+            $todayTip = UserTip::where('user_id', $this->user->id)
                 ->whereDate('created_at', $today)
                 ->latest()
                 ->with('tip')
                 ->first();
-            // Return today's tips if they exist
-            if (!$todayTips) {
+
+            if (! $todayTip) {
                 return $this->refreshTips();
             }
-            return $todayTips;
+
+            return $todayTip;
         } catch (Exception $e) {
             Log::error("TipsService::getDailyTips" . $e->getMessage());
             throw $e;
@@ -70,37 +72,50 @@ class TipsService
         try {
             $today = Carbon::today();
 
-            // Check if user already has tips for today
-            $todayTips = UserTip::where('user_id', $this->user->id)
+            // Last tip text for today (if any) so refresh can ask AI for something different.
+            $lastTodayTip = UserTip::where('user_id', $this->user->id)
                 ->whereDate('created_at', $today)
+                ->latest()
                 ->with('tip')
-                ->get();
-                
-            //in future change to get multiple tips with subcription plan
-            // If user already has 3 tips for today, return them
-            if ($todayTips->count() >= 3) {
-                throw new Exception('User already has 3 tips for today',200);
-            }
-            // Get tips user hasn't received yet
-            $excludeTipIds = UserTip::where('user_id', $this->user->id)
-                ->pluck('tip_id')
-                ->toArray();
-            if ($excludeTipIds) {
-                // Build query for new tips
-                $query = Tip::where('status', 'active')
-                    ->whereNotIn('id', $excludeTipIds);
-            } else {
-                $query = Tip::where('status', 'active');
-            }
+                ->first();
+            $previousTipText = $lastTodayTip && $lastTodayTip->tip ? $lastTodayTip->tip->text : null;
 
-            // Get 1 random tips
-            $newTips = $query->inRandomOrder()->first();
-            if (!$newTips) {
-                throw new Exception('No new tips available',200);
-            }
-            // Create user_tips records
+            // Build AI context from the active goal and today's spending.
+            $goal = $this->goalService->getActiveGoal();
+
+            $dailyLimit = (float) ($goal['others_data']['daily_target'] ?? 0);
+            $remainingBudget = (float) ($goal['others_data']['remaining_amount'] ?? 0);
+            $remainingDays = (int) ($goal['others_data']['needed_days'] ?? 0);
+
+            $todaySpentQuery = CheckIn::whereHas('goal', function ($query) {
+                $query->where('user_id', $this->user->id)
+                    ->where('status', 'active');
+            })
+                ->whereDate('check_date', $today);
+
+            $todaySpent = (float) $todaySpentQuery->sum('amount_spending');
+            $categories = $todaySpentQuery->pluck('spending_name')->filter()->unique()->values()->all();
+
+            $context = [
+                'daily_limit' => $dailyLimit,
+                'today_spent' => $todaySpent,
+                'remaining_budget' => $remainingBudget,
+                'remaining_days' => $remainingDays,
+                'categories' => $categories,
+                'previous_tip' => $previousTipText,
+            ];
+
+            $tipText = $this->openAIService->generateTip($context);
+
+            // Store the generated tip so the existing structure still works.
+            $tip = Tip::create([
+                'text' => $tipText,
+                'type' => 'moneycoach',
+                'status' => 'active',
+            ]);
+
             $userTip = UserTip::create([
-                'tip_id' => $newTips->id,
+                'tip_id' => $tip->id,
                 'goal_id' => null,
                 'user_id' => $this->user->id,
                 'is_seen' => true,
