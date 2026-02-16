@@ -26,12 +26,13 @@ class ProgressPageService
         try {
             $activeGoal = $this->goalService->getActiveGoal();
             
+            // total_saved = budget not spent (remaining), from check-in spending only
+            $remainingAmount = $activeGoal ? (float) ($activeGoal['others_data']['remaining_amount'] ?? 0) : 0;
             $journey = [
-                // Savings are no longer the core metric; expose spending journey.
-                'total_saved' => 0,
+                'total_saved' => $activeGoal ? number_format($remainingAmount) : 0,
                 'total_spending' => $activeGoal ? number_format($activeGoal['others_data']['spending_amount']) : 0,
                 'goal_target' => $activeGoal ? number_format($activeGoal['target_amount']) : 0,
-                // This now represents percentage of the budget that has been used.
+                // Percentage of the budget that has been used (from spending).
                 'progress_percentage' => $activeGoal ? $activeGoal['others_data']['persantage_progress'] : 0,
             ];
             $best_day_saving = number_format($this->goalService->bestDaySaving() ?? 0);
