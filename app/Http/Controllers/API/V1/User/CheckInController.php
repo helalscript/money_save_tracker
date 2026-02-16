@@ -25,8 +25,7 @@ class CheckInController extends Controller
     {
         try {
             $checkIns = $this->checkInService->index($request);
-
-            return Helper::jsonResponse(true, 'Check-ins fetched successfully', 200, $checkIns, true);
+            return Helper::jsonResponse(true, 'Check-ins fetched successfully', 200, $checkIns);
         } catch (Exception $e) {
             Log::error('CheckInController::index' . $e->getMessage());
 

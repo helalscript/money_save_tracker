@@ -30,11 +30,34 @@ class CheckInService
             $checkIns = CheckIn::whereHas('goal', function ($query) {
                 $query->where('user_id', $this->user->id);
             })
-                ->with(['goal'])
+                // ->select('id', 'amount_spending','check_date')
+                // ->with(['goal'])
                 ->orderBy('check_date', 'desc')
+                ->where('check_date', '>=', now()->startOfDay())
+                // ->selectRaw('SUM(amount_spending) as total_amount_spending')
                 ->paginate($perPage);
-
-            return $checkIns;
+            $totalAmountSpending = $checkIns->getCollection()->sum('amount_spending');
+            $totalAmountSaved = max(0,$totalAmountSpending - ($checkIns->getCollection()->first()->target_amount ?? 0)); //if minus then 0 else total amount saved
+            $data = [
+                'total_amount_spending' => $totalAmountSpending,
+                'total_amount_saved' => $totalAmountSaved,
+                'check_ins' => $checkIns->items(),
+                'pagination' => [
+                    'current_page' => $checkIns->currentPage(),
+                    'last_page' => $checkIns->lastPage(),
+                    'per_page' => $checkIns->perPage(),
+                    'total' => $checkIns->total(),
+                    'first_page_url' => $checkIns->url(1),
+                    'last_page_url' => $checkIns->url($checkIns->lastPage()),
+                    'next_page_url' => $checkIns->nextPageUrl(),
+                    'prev_page_url' => $checkIns->previousPageUrl(),
+                    'from' => $checkIns->firstItem(),
+                    'to' => $checkIns->lastItem(),
+                    'path' => $checkIns->path(),
+                ],
+            ];
+            return $data;
+            // return $checkIns;
         } catch (Exception $e) {
             Log::error("CheckInService::index" . $e->getMessage());
             throw $e;
