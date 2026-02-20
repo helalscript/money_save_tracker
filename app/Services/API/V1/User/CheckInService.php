@@ -39,8 +39,8 @@ class CheckInService
             $totalAmountSpending = $checkIns->getCollection()->sum('amount_spending');
             $totalAmountSaved = max(0,$totalAmountSpending - ($checkIns->getCollection()->first()->target_amount ?? 0)); //if minus then 0 else total amount saved
             $data = [
-                'total_amount_spending' => $totalAmountSpending,
-                'total_amount_saved' => $totalAmountSaved,
+                'total_amount_spending' => intval($totalAmountSpending),
+                'total_amount_saved' => intval($totalAmountSaved),
                 'check_ins' => $checkIns->items(),
                 'pagination' => [
                     'current_page' => $checkIns->currentPage(),

@@ -3,11 +3,11 @@
 namespace App\Services\API\V1\User;
 
 use App\Models\Goal;
+use Carbon\Carbon;
 use DB;
 use Exception;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
-use Carbon\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class GoalService
 {
@@ -31,18 +31,18 @@ class GoalService
             $goals = Goal::with([
                 'checkIns' => function ($query) {
                     $query->orderBy('check_date', 'desc');
-                }
+                },
             ])
                 ->where([
                     'status' => 'active',
-                    'user_id' => $this->user->id
+                    'user_id' => $this->user->id,
                 ])
                 ->orderBy('created_at', 'desc')
                 ->paginate($perPage);
 
             return $goals;
         } catch (Exception $e) {
-            Log::error("GoalService::index" . $e->getMessage());
+            Log::error('GoalService::index'.$e->getMessage());
             throw $e;
         }
     }
@@ -50,7 +50,6 @@ class GoalService
     /**
      * Store a new goal.
      *
-     * @param array $validatedData
      * @return mixed
      */
     public function store(array $validatedData)
@@ -58,10 +57,17 @@ class GoalService
         try {
             DB::beginTransaction();
             $validatedData['start_date'] = Carbon::today()->toDateString();
-            $totalDays = (new \DateTime($validatedData['end_date']))->diff(new \DateTime($validatedData['start_date']))->days + 1;
-            $amountToSave = $validatedData['target_amount'];
-            // $amountToSave = $validatedData['target_amount'] - ($validatedData['alredy_saved'] ?? 0);
-            $validatedData['daily_target'] = $amountToSave / $totalDays;
+            $startDate = Carbon::parse($validatedData['start_date']);
+            $endDate = Carbon::parse($validatedData['end_date']);
+            $totalDays = $startDate->diffInDays($endDate) + 1;
+
+            // User: monthly income, how much to save (target_amount), and by when.
+            // Total spendable = income in period - amount to save. Daily limit = spendable / days.
+            $monthlyIncome = (float) ($validatedData['monthly_income'] ?? 0);
+            $amountToSave = (float) ($validatedData['target_amount'] ?? 0);
+
+            $validatedData['daily_target'] = intval($totalDays > 0 ? ($monthlyIncome - $amountToSave) / ($totalDays) : 0); // this totaol spending target
+
             $validatedData['user_id'] = $this->user->id;
             $validatedData['status'] = 'active';
 
@@ -70,18 +76,19 @@ class GoalService
             $goal->load([
                 'checkIns' => function ($query) {
                     $query->orderBy('check_date', 'desc');
-                }
+                },
             ]);
-            //satus update other goals
+            // satus update other goals
             Goal::where('user_id', $this->user->id)
                 ->where('id', '!=', $goal->id)
                 ->update(['status' => 'inactive']);
 
             DB::commit();
+
             return $goal;
         } catch (Exception $e) {
             DB::rollBack();
-            Log::error("GoalService::store" . $e->getMessage());
+            Log::error('GoalService::store'.$e->getMessage());
             throw $e;
         }
     }
@@ -89,7 +96,6 @@ class GoalService
     /**
      * Display a specific goal.
      *
-     * @param int $id
      * @return mixed
      */
     public function show(int $id)
@@ -103,18 +109,19 @@ class GoalService
                 ->with([
                     'checkIns' => function ($query) {
                         $query->orderBy('check_date', 'desc');
-                    }
+                    },
                 ])
                 ->first();
 
-            if (!$goal) {
+            if (! $goal) {
                 throw new Exception('Goal not found or does not belong to you');
             }
             $goal['current_streak'] = $this->calculateStreak($goal);
             $goal['others_data'] = $this->calculateNewEndDate($goal);
+
             return $goal;
         } catch (Exception $e) {
-            Log::error("GoalService::show" . $e->getMessage());
+            Log::error('GoalService::show'.$e->getMessage());
             throw $e;
         }
     }
@@ -122,8 +129,6 @@ class GoalService
     /**
      * Update a specific goal.
      *
-     * @param int $id
-     * @param array $validatedData
      * @return mixed
      */
     public function update(int $id, array $validatedData)
@@ -133,7 +138,7 @@ class GoalService
                 ->where('user_id', $this->user->id)
                 ->first();
 
-            if (!$goal) {
+            if (! $goal) {
                 throw new Exception('Goal not found or does not belong to you');
             }
 
@@ -142,12 +147,12 @@ class GoalService
             $goal->load([
                 'checkIns' => function ($query) {
                     $query->orderBy('check_date', 'desc');
-                }
+                },
             ]);
 
             return $goal;
         } catch (Exception $e) {
-            Log::error("GoalService::update" . $e->getMessage());
+            Log::error('GoalService::update'.$e->getMessage());
             throw $e;
         }
     }
@@ -155,7 +160,6 @@ class GoalService
     /**
      * Delete a specific goal.
      *
-     * @param int $id
      * @return mixed
      */
     public function destroy(int $id)
@@ -165,7 +169,7 @@ class GoalService
                 ->where('user_id', $this->user->id)
                 ->first();
 
-            if (!$goal) {
+            if (! $goal) {
                 throw new Exception('Goal not found or does not belong to you');
             }
 
@@ -173,61 +177,70 @@ class GoalService
 
             return $goal;
         } catch (Exception $e) {
-            Log::error("GoalService::destroy" . $e->getMessage());
+            Log::error('GoalService::destroy'.$e->getMessage());
             throw $e;
         }
     }
 
-
     public function calculateNewEndDate($goal)
     {
-        // Treat target_amount as the total spending budget for the goal period.
-        $startDate = Carbon::parse($goal->start_date);
-        $endDate = Carbon::parse($goal->end_date);
+        // New spend-based model:
+        // User sets monthly_income, target_amount (how much to save in the period), and end_date.
+        // Spendable_total = income_in_period - target_amount
+        // Remaining_budget = spendable_total - total_spent
+        // Daily_limit_today = remaining_budget / days_remaining
+        $startDate = Carbon::parse($goal->start_date)->startOfDay();
+        $endDate = Carbon::parse($goal->end_date)->startOfDay();
 
-        // Total planned days in the goal period
-        $totalDays = $startDate->diffInDays($endDate) + 1;
+        $totalDays = max(1, $startDate->diffInDays($endDate) + 1);
 
-        // Static planned daily limit (initial)
-        $plannedDailyLimit = $totalDays > 0 ? $goal->target_amount / $totalDays : 0;
+        $monthlyIncome = (float) ($goal->monthly_income ?? 0);
+        $amountToSave = (float) ($goal->target_amount ?? 0);
 
-        // Total actually spent
-        $spendingAmount = $goal->checkIns()->sum('amount_spending');
+        // Approximate income for the goal period using a 30-day month.
+        $incomeInPeriod = $monthlyIncome * ($totalDays / 30);
+        $totalSpendable = max(0, $incomeInPeriod - $amountToSave);
 
-        // Remaining budget (never below zero)
-        $remainingBudget = max(0, $goal->target_amount - $spendingAmount);
+        $spendingAmount = (float) $goal->checkIns()->sum('amount_spending');
+        $remainingBudget = max(0, $totalSpendable - $spendingAmount);
 
-        // Time progress
-        $today = Carbon::today();
-        $daysElapsed = max(0, $startDate->diffInDays(min($today, $endDate)) + 1);
+        $today = Carbon::today()->startOfDay();
+        $effectiveToday = $today->lte($endDate) ? $today : $endDate;
+        $daysElapsed = max(0, $startDate->diffInDays($effectiveToday) + 1);
         $daysRemaining = max(0, $totalDays - $daysElapsed);
 
-        // Recalculated daily limit based on remaining budget and remaining time
         $dynamicDailyLimit = $daysRemaining > 0 ? $remainingBudget / $daysRemaining : 0;
 
-        // Percentage of budget used (spending-based progress)
-        $spendPercentage = $goal->target_amount > 0
-            ? ($spendingAmount / $goal->target_amount) * 100
-            : 0;
+        $spendPercentage = $totalSpendable > 0 ? ($spendingAmount / $totalSpendable) * 100 : 0;
+        $timePercentage = $totalDays > 0 ? ($daysElapsed / $totalDays) * 100 : 0;
 
-        // Update traffic-light indicator based on budget vs time progress
-        $this->updateGoalDeadlineIndicator($goal, $spendPercentage, $totalDays > 0 ? ($daysElapsed / $totalDays) * 100 : 0);
+        $this->updateGoalDeadlineIndicator($goal, $spendPercentage, $timePercentage);
+
+        // IMPORTANT: Use dot-decimal formatting WITHOUT thousands separators
+        // so the frontend and other services can safely cast to float.
+        $dailyTargetFormatted = number_format($dynamicDailyLimit, 2, '.', '');
+        $progressFormatted = number_format($spendPercentage, 2, '.', '');
 
         return [
-            // For UI, treat needed_days as how many days are left in the original plan.
             'needed_days' => $daysRemaining,
             'original_end_date' => $endDate->toDateString(),
-            // We no longer move the deadline; keep it as the original end date.
             'new_end_date' => $endDate->toDateString(),
-            // Savings are no longer the primary metric; keep for backward compatibility as 0.
+
+            // We no longer store/track actual savings in check-ins.
+            // So until you introduce a savings field again, saved_amount should be 0.
             'saved_amount' => 0,
+            // Expose the user's desired savings for the period separately.
+            'save_target' => $amountToSave,
+
             'spending_amount' => $spendingAmount,
             'remaining_amount' => $remainingBudget,
-            // Expose the *current* daily limit the user should try to stay under.
-            'daily_target' => number_format($dynamicDailyLimit, 2),
+
+            // This is the current daily spend limit (dynamic).
+            'daily_target' => $dailyTargetFormatted,
             'deadline_indicator' => $goal->deadline_indicator ?? 'green',
-            // Keep the key name but now represent percentage of budget used.
-            'persantage_progress' => number_format($spendPercentage, 2)
+
+            // Keep key name for backward compatibility; now means "% of spendable budget used".
+            'persantage_progress' => $progressFormatted,
         ];
     }
 
@@ -237,7 +250,7 @@ class GoalService
         $checkingDates = $goal->checkIns()
             ->orderBy('check_date', 'desc')
             ->pluck('check_date')
-            ->map(fn($date) => Carbon::parse($date)->toDateString())
+            ->map(fn ($date) => Carbon::parse($date)->toDateString())
             ->unique()
             ->values()
             ->toArray();
@@ -245,6 +258,7 @@ class GoalService
         // If no check-ins exist, streak is 0
         if (empty($checkingDates)) {
             $goal->update(['current_streak' => 0]);
+
             return 0;
         }
 
@@ -256,7 +270,7 @@ class GoalService
         $todayHasCheckIn = in_array($today, $checkingDates);
 
         // If today has no check-in, check from yesterday
-        if (!$todayHasCheckIn) {
+        if (! $todayHasCheckIn) {
             $checkDate->subDay();
         }
 
@@ -281,6 +295,7 @@ class GoalService
         // If we have no timeline information, default to green.
         if ($timePercentage <= 0) {
             $goal->update(['deadline_indicator' => 'green']);
+
             return;
         }
 
@@ -319,7 +334,7 @@ class GoalService
             $goal['others_data'] = $this->calculateNewEndDate($goal);
             return $goal;
         } catch (Exception $e) {
-            Log::error("GoalService::getActiveGoal" . $e->getMessage());
+            Log::error('GoalService::getActiveGoal'.$e->getMessage());
             throw $e;
         }
     }
@@ -330,10 +345,10 @@ class GoalService
             'user_id' => $this->user->id,
             'status' => 'active',
         ])->with([
-                    'checkIns' => function ($query) {
-                        $query->orderBy('check_date', 'desc');
-                    }
-                ])
+            'checkIns' => function ($query) {
+                $query->orderBy('check_date', 'desc');
+            },
+        ])
             ->first();
         // Get current streak
         $currentStreak = $this->calculateStreak($goal);
@@ -341,7 +356,7 @@ class GoalService
         // Get all check-in dates
         $checkInDates = $goal->checkIns()
             ->pluck('check_date')
-            ->map(fn($date) => Carbon::parse($date)->toDateString())
+            ->map(fn ($date) => Carbon::parse($date)->toDateString())
             ->unique()
             ->toArray();
 
@@ -371,9 +386,9 @@ class GoalService
 
         return [
             'current_streak' => $currentStreak,
-            'streak_text' => $currentStreak . ' day streak!',
+            'streak_text' => $currentStreak.' day streak!',
             'message' => $currentStreak > 0 ? 'Keep it going!' : 'Start your streak today!',
-            'week_range' => $startOfWeek->format('M d') . ' - ' . $endOfWeek->format('M d'),
+            'week_range' => $startOfWeek->format('M d').' - '.$endOfWeek->format('M d'),
             'weekly_checkins' => $weeklyData,
         ];
     }
@@ -407,10 +422,11 @@ class GoalService
 
             return $bestMargin;
         } catch (Exception $e) {
-            Log::error("GoalService::bestDaySaving" . $e->getMessage());
+            Log::error('GoalService::bestDaySaving'.$e->getMessage());
             throw $e;
         }
     }
+
     public function dailyAverageSaving()
     {
         try {
@@ -443,25 +459,24 @@ class GoalService
 
             return $totalMargin / $daysCount;
         } catch (Exception $e) {
-            Log::error("GoalService::dailyAverageSaving" . $e->getMessage());
+            Log::error('GoalService::dailyAverageSaving'.$e->getMessage());
             throw $e;
         }
     }
 
     public function nowActiveGoal()
     {
-        $goal = Goal::where([
-            'user_id' => $this->user->id,
-            'status' => 'active',
-        ])->with([
-                    'checkIns' => function ($query) {
-                        $query->orderBy('check_date', 'desc');
-                    }
-                ])
+        $goal = Goal::where([ 'user_id' => $this->user->id,'status' => 'active'])
+        ->with([
+            'checkIns' => function ($query) {
+                $query->orderBy('check_date', 'desc');
+            },
+        ])
             ->first();
-        if (!$goal) {
+        if (! $goal) {
             throw new Exception('Goal not found or does not belong to you');
         }
+
         return $goal;
     }
 }
