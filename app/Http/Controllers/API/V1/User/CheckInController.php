@@ -39,9 +39,9 @@ class CheckInController extends Controller
     public function store(Request $request)
     {
         $validateData = $request->validate([
-            // We always attach the active goal internally.
-            'amount_spending' => 'required|numeric|min:0.01',
-            'amount_saved' => 'nullable|numeric|min:0.01',
+            // User only inputs daily spending; amount_saved is computed server-side.
+            'amount_spending' => 'required|numeric|min:0',
+            'amount_saved' => 'nullable|numeric|min:0',
             'spending_type' => 'nullable|string|max:191',
             'spending_name' => 'nullable|string|max:191',
             'note' => 'nullable|string',

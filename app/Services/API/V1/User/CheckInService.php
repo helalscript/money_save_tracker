@@ -5,6 +5,7 @@ namespace App\Services\API\V1\User;
 use App\Models\CheckIn;
 use App\Models\Goal;
 use Exception;
+use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Auth;
 
@@ -18,7 +19,8 @@ class CheckInService
     }
 
     /**
-     * Fetch all check-ins for the authenticated user's goals.
+     * Fetch check-ins for the current active goal only.
+     * When user sets a new goal, only that goal's check-ins are shown.
      *
      * @return mixed
      */
@@ -27,20 +29,50 @@ class CheckInService
         try {
             $perPage = $request->per_page ?? 25;
 
-            $checkIns = CheckIn::whereHas('goal', function ($query) {
-                $query->where('user_id', $this->user->id);
-            })
-                // ->select('id', 'amount_spending','check_date')
-                // ->with(['goal'])
+            // Get current active goal for this user (same as store – one active goal at a time).
+            $activeGoal = Goal::where('user_id', $this->user->id)
+                ->where('status', 'active')
+                ->first();
+
+            if (! $activeGoal) {
+                return [
+                    'total_amount_spending' => 0,
+                    'total_amount_saved' => 0,
+                    'daily_target' => 0,
+                    'check_ins' => [],
+                    'pagination' => [
+                        'current_page' => 1,
+                        'last_page' => 1,
+                        'per_page' => $perPage,
+                        'total' => 0,
+                        'first_page_url' => $request->url() . '?page=1',
+                        'last_page_url' => $request->url() . '?page=1',
+                        'next_page_url' => null,
+                        'prev_page_url' => null,
+                        'from' => null,
+                        'to' => null,
+                        'path' => $request->path(),
+                    ],
+                ];
+            }
+
+            // Today's spend target from active goal (daily budget = max spend per day).
+            $dailyTarget = (float) ($activeGoal->daily_target ?? 0);
+
+            // Only today's check-ins for the active goal.
+            $checkIns = CheckIn::where('goal_id', $activeGoal->id)
                 ->orderBy('check_date', 'desc')
-                ->where('check_date', '>=', now()->startOfDay())
-                // ->selectRaw('SUM(amount_spending) as total_amount_spending')
+                ->whereDate('check_date', Carbon::today())
                 ->paginate($perPage);
-            $totalAmountSpending = $checkIns->getCollection()->sum('amount_spending');
-            $totalAmountSaved = max(0,$totalAmountSpending - ($checkIns->getCollection()->first()->target_amount ?? 0)); //if minus then 0 else total amount saved
+
+            $totalAmountSpending = (float) $checkIns->getCollection()->sum('amount_spending');
+            // Today's saved = today's spend target - today's total spent (depends on daily_target).
+            $totalAmountSaved = $dailyTarget - $totalAmountSpending;
+
             $data = [
-                'total_amount_spending' => intval($totalAmountSpending),
-                'total_amount_saved' => intval($totalAmountSaved),
+                'total_amount_spending' => (int) round($totalAmountSpending),
+                'total_amount_saved' => (int) round($totalAmountSaved),
+                'daily_target' => (int) round($dailyTarget),
                 'check_ins' => $checkIns->items(),
                 'pagination' => [
                     'current_page' => $checkIns->currentPage(),
@@ -57,7 +89,6 @@ class CheckInService
                 ],
             ];
             return $data;
-            // return $checkIns;
         } catch (Exception $e) {
             Log::error("CheckInService::index" . $e->getMessage());
             throw $e;
@@ -81,11 +112,18 @@ class CheckInService
             if (!$goal) {
                 throw new Exception('Goal not found or does not belong to you');
             }
+
+            // Daily budget = (total_money - target_saving) / total_days (stored on goal as daily_target).
+            $dailyBudget = (float) ($goal->daily_target ?? 0);
+            $todaySpent = (float) ($validatedData['amount_spending'] ?? 0);
+            // Rule: daily_saved_amount = daily_budget - today_spent (can be negative if overspent).
+            $amountSaved = $dailyBudget - $todaySpent;
+
             $validatedData['goal_id'] = $goal->id;
             $validatedData['target_amount'] = $goal->daily_target ?? 0;
+            $validatedData['amount_saved'] = $amountSaved;
             $validatedData['check_date'] = now();
             $validatedData['status'] = 'completed';
-            // dd( $validatedData);
             $checkIn = CheckIn::create($validatedData);
 
             // $checkIn->load(['goal:id,title,goal_type,target_amount,status']);
@@ -142,15 +180,19 @@ class CheckInService
                 throw new Exception('Check-in not found or does not belong to your goals');
             }
 
-            // Verify the goal belongs to the authenticated user if goal_id is being updated
+            $goal = $checkIn->goal;
             if (isset($validatedData['goal_id'])) {
                 $goal = Goal::where('id', $validatedData['goal_id'])
                     ->where('user_id', $this->user->id)
                     ->first();
-
                 if (!$goal) {
                     throw new Exception('Goal not found or does not belong to you');
                 }
+            }
+            // Recompute amount_saved when amount_spending changes: daily_saved = daily_budget - today_spent.
+            if (array_key_exists('amount_spending', $validatedData)) {
+                $dailyBudget = (float) ($goal->daily_target ?? 0);
+                $validatedData['amount_saved'] = $dailyBudget - (float) $validatedData['amount_spending'];
             }
 
             $checkIn->update($validatedData);

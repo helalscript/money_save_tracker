@@ -61,12 +61,10 @@ class GoalService
             $endDate = Carbon::parse($validatedData['end_date']);
             $totalDays = $startDate->diffInDays($endDate) + 1;
 
-            // User: monthly income, how much to save (target_amount), and by when.
-            // Total spendable = income in period - amount to save. Daily limit = spendable / days.
+            // daily_budget = (total_money - target_saving) / total_days; stored as daily_target (max spend per day).
             $monthlyIncome = (float) ($validatedData['monthly_income'] ?? 0);
             $amountToSave = (float) ($validatedData['target_amount'] ?? 0);
-
-            $validatedData['daily_target'] = intval($totalDays > 0 ? ($monthlyIncome - $amountToSave) / ($totalDays) : 0); // this totaol spending target
+            $validatedData['daily_target'] = $totalDays > 0 ? round(($monthlyIncome - $amountToSave) / $totalDays, 2) : 0;
 
             $validatedData['user_id'] = $this->user->id;
             $validatedData['status'] = 'active';
@@ -182,66 +180,94 @@ class GoalService
         }
     }
 
+    /**
+     * Compute savings-based progress for the active goal.
+     * Rules: daily_budget = (total_money - target_saving) / total_days;
+     *        daily_saved = daily_budget - today_spent;
+     *        total_saved = sum of daily_saved; progress % = (total_saved / target_saving) * 100.
+     */
     public function calculateNewEndDate($goal)
     {
-        // New spend-based model:
-        // User sets monthly_income, target_amount (how much to save in the period), and end_date.
-        // Spendable_total = income_in_period - target_amount
-        // Remaining_budget = spendable_total - total_spent
-        // Daily_limit_today = remaining_budget / days_remaining
         $startDate = Carbon::parse($goal->start_date)->startOfDay();
         $endDate = Carbon::parse($goal->end_date)->startOfDay();
-
         $totalDays = max(1, $startDate->diffInDays($endDate) + 1);
+        $targetSaving = (float) ($goal->target_amount ?? 0);
+        // daily_budget = (total_money - target_saving) / total_days (stored on goal as daily_target).
+        $dailyBudget = (float) ($goal->daily_target ?? 0);
 
-        $monthlyIncome = (float) ($goal->monthly_income ?? 0);
-        $amountToSave = (float) ($goal->target_amount ?? 0);
+        // Total saved so far = sum of (daily_saved_amount) from all check-ins.
+        // Use amount_saved when set; else backward-compat: daily_budget - amount_spending (using check-in's target_amount as daily_budget).
+        $totalSaved = (float) $goal->checkIns()->get()->sum(function ($c) {
+            $saved = $c->amount_saved;
+            if ($saved !== null && (string) $saved !== '') {
+                return (float) $saved;
+            }
+            $budget = (float) ($c->target_amount ?? 0);
+            $spent = (float) ($c->amount_spending ?? 0);
+            return $budget - $spent;
+        });
 
-        // Approximate income for the goal period using a 30-day month.
-        $incomeInPeriod = $monthlyIncome * ($totalDays / 30);
-        $totalSpendable = max(0, $incomeInPeriod - $amountToSave);
-
+        // Remaining saving = target_saving - total_saved (can be negative if ahead).
+        $remainingSaving = $targetSaving - $totalSaved;
         $spendingAmount = (float) $goal->checkIns()->sum('amount_spending');
-        $remainingBudget = max(0, $totalSpendable - $spendingAmount);
+
+        // Progress percentage = (total_saved / target_saving) * 100; clamp 0–100 for display.
+        $progressPercent = $targetSaving > 0
+            ? min(100.0, max(0.0, ($totalSaved / $targetSaving) * 100))
+            : 0.0;
 
         $today = Carbon::today()->startOfDay();
         $effectiveToday = $today->lte($endDate) ? $today : $endDate;
         $daysElapsed = max(0, $startDate->diffInDays($effectiveToday) + 1);
+        $currentDay = (int) min($totalDays, max(1, $daysElapsed));
         $daysRemaining = max(0, $totalDays - $daysElapsed);
 
-        $dynamicDailyLimit = $daysRemaining > 0 ? $remainingBudget / $daysRemaining : 0;
+        // Expected saving by today = (target_saving / total_days) × current_day.
+        $expectedSavingByToday = $totalDays > 0 ? ($targetSaving / $totalDays) * $currentDay : 0;
 
-        $spendPercentage = $totalSpendable > 0 ? ($spendingAmount / $totalSpendable) * 100 : 0;
-        $timePercentage = $totalDays > 0 ? ($daysElapsed / $totalDays) * 100 : 0;
+        // Status message: if total_saved >= expected_saving -> on track / early; else need to save more.
+        if ($totalSaved >= $expectedSavingByToday) {
+            $statusMessage = "At your pace, you'll reach your goal early";
+        } else {
+            $statusMessage = 'You need to save more per day to reach your goal';
+        }
 
-        $this->updateGoalDeadlineIndicator($goal, $spendPercentage, $timePercentage);
+        // Deadline indicator: green = on track, yellow = slightly behind, red = falling behind.
+        $ratio = $expectedSavingByToday > 0 ? $totalSaved / $expectedSavingByToday : 1.0;
+        $this->updateGoalDeadlineIndicatorFromSavings($goal, $ratio);
 
-        // IMPORTANT: Use dot-decimal formatting WITHOUT thousands separators
-        // so the frontend and other services can safely cast to float.
-        $dailyTargetFormatted = number_format($dynamicDailyLimit, 2, '.', '');
-        $progressFormatted = number_format($spendPercentage, 2, '.', '');
+        $dailyTargetFormatted = number_format($dailyBudget, 2, '.', '');
+        $progressFormatted = number_format($progressPercent, 2, '.', '');
 
         return [
             'needed_days' => $daysRemaining,
             'original_end_date' => $endDate->toDateString(),
             'new_end_date' => $endDate->toDateString(),
-
-            // We no longer store/track actual savings in check-ins.
-            // So until you introduce a savings field again, saved_amount should be 0.
-            'saved_amount' => 0,
-            // Expose the user's desired savings for the period separately.
-            'save_target' => $amountToSave,
-
+            'saved_amount' => $totalSaved,
+            'save_target' => $targetSaving,
+            'remaining_saving' => $remainingSaving,
             'spending_amount' => $spendingAmount,
-            'remaining_amount' => $remainingBudget,
-
-            // This is the current daily spend limit (dynamic).
+            'remaining_amount' => $remainingSaving,
             'daily_target' => $dailyTargetFormatted,
             'deadline_indicator' => $goal->deadline_indicator ?? 'green',
-
-            // Keep key name for backward compatibility; now means "% of spendable budget used".
             'persantage_progress' => $progressFormatted,
+            'status_message' => $statusMessage,
+            'expected_saving_by_today' => $expectedSavingByToday,
         ];
+    }
+
+    /**
+     * Set deadline_indicator from savings ratio (total_saved / expected_saving_by_today).
+     */
+    protected function updateGoalDeadlineIndicatorFromSavings($goal, $savingsRatio)
+    {
+        if ($savingsRatio >= 1.0) {
+            $goal->update(['deadline_indicator' => 'green']);
+        } elseif ($savingsRatio >= 0.8) {
+            $goal->update(['deadline_indicator' => 'yellow']);
+        } else {
+            $goal->update(['deadline_indicator' => 'red']);
+        }
     }
 
     public function calculateStreak($goal)
@@ -393,11 +419,14 @@ class GoalService
         ];
     }
 
+    /**
+     * Best single-day saved amount = max over check-ins of (daily_saved_amount).
+     * Uses amount_saved when set; else daily_budget - amount_spending (clamped >= 0 for "best day").
+     */
     public function bestDaySaving()
     {
         try {
             $goal = $this->nowActiveGoal();
-            // Interpret \"saving\" as how far under the daily limit the user stayed.
             $checkIns = $goal->checkIns;
 
             if ($checkIns->isEmpty()) {
@@ -405,21 +434,19 @@ class GoalService
             }
 
             $bestMargin = 0;
-
             foreach ($checkIns as $checkIn) {
-                $dailyLimit = (float) $checkIn->target_amount;
-                $spent = (float) $checkIn->amount_spending;
-
-                if ($dailyLimit <= 0) {
-                    continue;
+                $saved = $checkIn->amount_saved;
+                if ($saved !== null && (string) $saved !== '') {
+                    $margin = max(0, (float) $saved);
+                } else {
+                    $dailyLimit = (float) ($checkIn->target_amount ?? 0);
+                    $spent = (float) ($checkIn->amount_spending ?? 0);
+                    $margin = max(0, $dailyLimit - $spent);
                 }
-
-                $margin = max(0, $dailyLimit - $spent);
                 if ($margin > $bestMargin) {
                     $bestMargin = $margin;
                 }
             }
-
             return $bestMargin;
         } catch (Exception $e) {
             Log::error('GoalService::bestDaySaving'.$e->getMessage());
@@ -427,6 +454,10 @@ class GoalService
         }
     }
 
+    /**
+     * Daily average saved = total_saved / number of check-in days.
+     * Uses amount_saved when set; else daily_budget - amount_spending per check-in.
+     */
     public function dailyAverageSaving()
     {
         try {
@@ -439,24 +470,21 @@ class GoalService
 
             $totalMargin = 0;
             $daysCount = 0;
-
             foreach ($checkIns as $checkIn) {
-                $dailyLimit = (float) $checkIn->target_amount;
-                $spent = (float) $checkIn->amount_spending;
-
-                if ($dailyLimit <= 0) {
-                    continue;
+                $saved = $checkIn->amount_saved;
+                if ($saved !== null && (string) $saved !== '') {
+                    $margin = (float) $saved;
+                } else {
+                    $dailyLimit = (float) ($checkIn->target_amount ?? 0);
+                    $spent = (float) ($checkIn->amount_spending ?? 0);
+                    $margin = $dailyLimit - $spent;
                 }
-
-                $margin = max(0, $dailyLimit - $spent);
                 $totalMargin += $margin;
                 $daysCount++;
             }
-
             if ($daysCount === 0) {
                 return 0;
             }
-
             return $totalMargin / $daysCount;
         } catch (Exception $e) {
             Log::error('GoalService::dailyAverageSaving'.$e->getMessage());
