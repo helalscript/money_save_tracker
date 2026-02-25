@@ -61,10 +61,12 @@ class GoalService
             $endDate = Carbon::parse($validatedData['end_date']);
             $totalDays = $startDate->diffInDays($endDate) + 1;
 
-            // daily_budget = (total_money - target_saving) / total_days; stored as daily_target (max spend per day).
+            // total_spend_allowed = monthly_income - target_amount (total money available for spending).
             $monthlyIncome = (float) ($validatedData['monthly_income'] ?? 0);
             $amountToSave = (float) ($validatedData['target_amount'] ?? 0);
-            $validatedData['daily_target'] = $totalDays > 0 ? round(($monthlyIncome - $amountToSave) / $totalDays, 2) : 0;
+            $validatedData['total_spend_allowed'] = round(max(0, $monthlyIncome - $amountToSave), 2);
+            // daily_budget = total_spend_allowed / total_days; stored as daily_target (max spend per day).
+            $validatedData['daily_target'] = $totalDays > 0 ? round($validatedData['total_spend_allowed'] / $totalDays, 2) : 0;
 
             $validatedData['user_id'] = $this->user->id;
             $validatedData['status'] = 'active';
@@ -182,9 +184,8 @@ class GoalService
 
     /**
      * Compute savings-based progress for the active goal.
-     * Rules: daily_budget = (total_money - target_saving) / total_days;
-     *        daily_saved = daily_budget - today_spent;
-     *        total_saved = sum of daily_saved; progress % = (total_saved / target_saving) * 100.
+     * Simplified calculation: total_saved = total_spend_allowed - total_spent.
+     * Where total_spent = sum of all check-ins' daily_spent_amount (or amount_spending for legacy).
      */
     public function calculateNewEndDate($goal)
     {
@@ -192,24 +193,25 @@ class GoalService
         $endDate = Carbon::parse($goal->end_date)->startOfDay();
         $totalDays = max(1, $startDate->diffInDays($endDate) + 1);
         $targetSaving = (float) ($goal->target_amount ?? 0);
-        // daily_budget = (total_money - target_saving) / total_days (stored on goal as daily_target).
+        $monthlyIncome = (float) ($goal->monthly_income ?? 0);
+        // total_spend_allowed = monthly_income - target_amount; calculate if null (for existing goals).
+        $totalSpendAllowed = (float) ($goal->total_spend_allowed ?? 0);
+        if ($totalSpendAllowed <= 0) {
+            $totalSpendAllowed = max(0, $monthlyIncome - $targetSaving);
+        }
         $dailyBudget = (float) ($goal->daily_target ?? 0);
 
-        // Total saved so far = sum of (daily_saved_amount) from all check-ins.
-        // Use amount_saved when set; else backward-compat: daily_budget - amount_spending (using check-in's target_amount as daily_budget).
-        $totalSaved = (float) $goal->checkIns()->get()->sum(function ($c) {
-            $saved = $c->amount_saved;
-            if ($saved !== null && (string) $saved !== '') {
-                return (float) $saved;
-            }
-            $budget = (float) ($c->target_amount ?? 0);
-            $spent = (float) ($c->amount_spending ?? 0);
-            return $budget - $spent;
+        // Total spent = sum of all check-ins' daily_spent_amount (or amount_spending for legacy).
+        $totalSpent = (float) $goal->checkIns()->get()->sum(function ($c) {
+            return (float) ($c->daily_spent_amount ?? $c->amount_spending ?? 0);
         });
+
+        // Total saved = total_spend_allowed - total_spent (simpler calculation).
+        $totalSaved = max(0, $totalSpendAllowed - $totalSpent);
 
         // Remaining saving = target_saving - total_saved (can be negative if ahead).
         $remainingSaving = $targetSaving - $totalSaved;
-        $spendingAmount = (float) $goal->checkIns()->sum('amount_spending');
+        $spendingAmount = $totalSpent;
 
         // Progress percentage = (total_saved / target_saving) * 100; clamp 0–100 for display.
         $progressPercent = $targetSaving > 0
@@ -253,6 +255,9 @@ class GoalService
             'persantage_progress' => $progressFormatted,
             'status_message' => $statusMessage,
             'expected_saving_by_today' => $expectedSavingByToday,
+            'current_day' => $currentDay,
+            'total_days' => $totalDays,
+            'total_spend_allowed' => round($totalSpendAllowed, 2),
         ];
     }
 
