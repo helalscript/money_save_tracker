@@ -13,9 +13,21 @@ use App\Models\Goal;
 class SavingsCalculationService
 {
     /**
-     * Get derived goal values (M, G, D, total_spend_allowed, per_day_allowed_spend, per_day_save_target).
-     * Uses existing goal fields: monthly_income = total_money for period, target_amount = goal_save,
-     * start_date/end_date for total_days. daily_target is already per_day_allowed_spend.
+     * Get derived goal values:
+     * - total_money (M)            → monthly_income (total budget for the period)
+     * - goal_save (G)              → target_amount (how much the user wants to save)
+     * - total_days (D)             → days between start_date and end_date (inclusive)
+     * - total_spend_allowed        → M - G  (total that can be spent in the period)
+     * - per_day_allowed_spend      → (M - G) / D  (daily spending limit, e.g. 700/7 = 100)
+     * - per_day_save_target        → G / D        (how much should be saved per day on average; used for guidance only)
+     *
+     * These values back your example:
+     * - total_money = 1000
+     * - goal_save   = 300
+     * - total_days  = 7
+     * - total_spend_allowed   = 700
+     * - per_day_allowed_spend = 100
+     * - per_day_save_target   ≈ 42.86
      *
      * @return array{total_money: float, goal_save: float, total_days: int, total_spend_allowed: float, per_day_allowed_spend: float, per_day_save_target: float}
      */
@@ -42,32 +54,44 @@ class SavingsCalculationService
     }
 
     /**
-     * Calculate daily save for a check-in. Only used when a check-in exists.
-     * New logic:
-     * - If daily_spent <= per_day_allowed_spend: daily_save = per_day_save_target + (per_day_allowed_spend - daily_spent)
-     *   Example: save_target=300, days=7 → per_day_save_target=42.86; if spend 80 (allowed=100) → save = 42.86 + (100-80) = 62.86
-     * - If daily_spent > per_day_allowed_spend: daily_save = 0 (overspending cancels savings).
+     * Calculate "today's saved" for a check-in day using your simple rule:
+     *
+     * - per_day_allowed_spend = daily spending limit (e.g. 700 ÷ 7 = 100)
+     * - daily_spent_amount    = how much spent today (e.g. 50)
+     * - today_saved           = max(0, per_day_allowed_spend - daily_spent_amount)
+     *
+     * So in your example:
+     * - today_saved = max(0, 100 - 50) = 50 saved
+     *
+     * Note: per_day_save_target (G ÷ D) is still used for guidance (how much
+     * you *should* save per day on average), but does not get added into
+     * the per-day saved amount. Progressive savings are:
+     *
+     *   total_saved = Σ(today_saved) over all check-in days
+     *   remaining   = goal_save - total_saved
      *
      * @param float $perDayAllowedSpend From goal (per_day_allowed_spend).
-     * @param float $perDaySaveTarget   From goal (goal_save / total_days).
-     * @param float $dailySpentAmount   User input for that day.
+     * @param float $dailySpentAmount   Total spent for that day.
      * @return float Always >= 0.
      */
-    public function calculateDailySave(float $perDayAllowedSpend, float $perDaySaveTarget, float $dailySpentAmount): float
+    public function calculateDailySave(float $perDayAllowedSpend, float $dailySpentAmount): float
     {
-        if ($dailySpentAmount > $perDayAllowedSpend) {
-            // Overspending: no savings for this day.
-            return 0;
+        if ($dailySpentAmount >= $perDayAllowedSpend) {
+            // Spent at or over the daily limit → no savings for that day.
+            return 0.0;
         }
-        // Within limit: per_day_save_target + (per_day_allowed_spend - daily_spent)
-        $bonus = $perDayAllowedSpend - $dailySpentAmount;
-        return round($perDaySaveTarget + $bonus, 2);
+
+        return round($perDayAllowedSpend - $dailySpentAmount, 2);
     }
 
     /**
      * Get tracking metrics from existing check-ins only. No row = no calculation.
-     * days_passed = COUNT(check-in records); total_saved = SUM(daily_save).
-     * Backward compatible: uses calculated_daily_save when set, else non-negative amount_saved.
+     *
+     * New behaviour (matches your example):
+     * - each date should be counted only once:
+     *   today_saved(date) = max(0, per_day_allowed_spend - Σ(daily_spent_amount for that date))
+     * - total_saved = Σ today_saved(date) for all dates
+     * - days_passed = at least 1 check-in date (unique dates)
      *
      * @return array{total_saved: float, days_passed: int, goal_completion_percent: float}
      */
@@ -75,19 +99,47 @@ class SavingsCalculationService
     {
         $derived = $this->getGoalDerived($goal);
         $goalSave = $derived['goal_save'];
+        $perDayAllowedSpend = $derived['per_day_allowed_spend'];
         $checkIns = $goal->checkIns()->get();
 
-        $daysPassed = $checkIns->count();
-        $totalSaved = (float) $checkIns->sum(function ($row) {
-            if ($row->calculated_daily_save !== null && $row->calculated_daily_save !== '') {
-                return max(0, (float) $row->calculated_daily_save);
+        // Fallback for very old goals where daily limit is not defined.
+        if ($perDayAllowedSpend <= 0) {
+            $daysPassed = $checkIns->count();
+            $totalSaved = (float) $checkIns->sum(function ($row) {
+                if ($row->calculated_daily_save !== null && $row->calculated_daily_save !== '') {
+                    return max(0, (float) $row->calculated_daily_save);
+                }
+                $legacy = $row->amount_saved;
+                if ($legacy !== null && $legacy !== '') {
+                    return max(0, (float) $legacy);
+                }
+                return 0;
+            });
+        } else {
+            // Group by date so that each calendar day contributes only once.
+            $groupedByDate = $checkIns->groupBy(function ($row) {
+                return $row->check_date ? $row->check_date->toDateString() : null;
+            });
+
+            $daysPassed = 0;
+            $totalSaved = 0.0;
+
+            foreach ($groupedByDate as $date => $rows) {
+                if ($date === null) {
+                    continue;
+                }
+                $daysPassed++;
+
+                // Total spent on this calendar day (sum of all check-ins' spending).
+                $totalDailySpent = (float) $rows->sum(function ($row) {
+                    return (float) ($row->daily_spent_amount ?? $row->amount_spending ?? 0);
+                });
+
+                // today_saved = max(0, daily_limit - total_daily_spent)
+                $todaySaved = $this->calculateDailySave($perDayAllowedSpend, $totalDailySpent);
+                $totalSaved += $todaySaved;
             }
-            $legacy = $row->amount_saved;
-            if ($legacy !== null && $legacy !== '') {
-                return max(0, (float) $legacy);
-            }
-            return 0;
-        });
+        }
         $goalCompletionPercent = $goalSave > 0
             ? min(100, round(($totalSaved / $goalSave) * 100, 2))
             : 0;
