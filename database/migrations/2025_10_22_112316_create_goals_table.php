@@ -18,10 +18,11 @@ return new class extends Migration
             $table->decimal('fixed_expense', 15, 2)->nullable();
             $table->decimal('alredy_saved', 15, 2)->nullable(); // Note: keeping original typo as per schema
             $table->decimal('debt_blance', 15, 2)->nullable(); // Note: keeping original typo as per schema
-            $table->enum('goal_type', ['save_money', 'paying_debt']);
-            $table->decimal('target_amount', 15, 2);
-            $table->date('start_date');
-            $table->date('end_date');
+            $table->enum('goal_type', ['save_money', 'paying_debt'])->nullable();
+            $table->decimal('target_amount', 15, 2)->nullable();
+            $table->decimal('total_spend_allowed', 15, 2)->nullable();
+            $table->date('start_date')->nullable();
+            $table->date('end_date')->nullable();
             $table->decimal('daily_target', 15, 2)->nullable();
             $table->integer('current_streak')->default(0);
             $table->enum('deadline_indicator',['green', 'yellow', 'red'])->default('green');

@@ -11,6 +11,8 @@ class CheckIn extends Model
         'goal_id',
         'amount_spending',
         'amount_saved',
+        'daily_spent_amount',
+        'calculated_daily_save',
         'spending_type',
         'spending_name',
         'note',
@@ -22,6 +24,8 @@ class CheckIn extends Model
     protected $casts = [
         'amount_spending' => 'decimal:2',
         'amount_saved' => 'decimal:2',
+        'daily_spent_amount' => 'decimal:2',
+        'calculated_daily_save' => 'decimal:2',
         'target_amount' => 'decimal:2',
         'check_date' => 'date',
         'status' => 'string',

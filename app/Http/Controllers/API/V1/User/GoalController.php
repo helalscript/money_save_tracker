@@ -26,7 +26,7 @@ class GoalController extends Controller
     {
         try {
             $goals = $this->goalService->index($request);
-
+            
             return Helper::jsonResponse(true, 'Goals fetched successfully', 200, $goals, true);
         } catch (Exception $e) {
             Log::error('GoalController::index' . $e->getMessage());
@@ -48,13 +48,13 @@ class GoalController extends Controller
             'debt_blance' => 'nullable|numeric|min:0',
             // We no longer ask the user for goal type; keep it optional for backward compatibility.
             'goal_type' => 'nullable|string|in:save_money,paying_debt',
+            // Amount user wants to save in the period; spendable = income_in_period - target_amount
             'target_amount' => 'required|numeric|min:0',
             // 'start_date' => 'required|date|date_format:Y-m-d|before:end_date|after_or_equal:today',
             'end_date' => 'required|date|date_format:Y-m-d|after:today',
             // 'daily_target' => 'nullable|numeric|min:0',
             // 'status' => 'nullable|string|in:active,inactive,completed',
         ]);
-        // dd($validateData);
         try {
             $goal = $this->goalService->store($validateData);
 
