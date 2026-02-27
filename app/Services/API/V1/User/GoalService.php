@@ -13,7 +13,7 @@ class GoalService
 {
     protected $user;
 
-    public function __construct()
+    public function __construct(protected SavingsCalculationService $savingsCalculation)
     {
         $this->user = Auth::user();
     }
@@ -182,41 +182,34 @@ class GoalService
         }
     }
 
-    /**
-     * Compute savings-based progress for the active goal.
-     * Simplified calculation: total_saved = total_spend_allowed - total_spent.
-     * Where total_spent = sum of all check-ins' daily_spent_amount (or amount_spending for legacy).
-     */
     public function calculateNewEndDate($goal)
     {
+        // Use the same logic as CheckIn progress:
+        // - total_saved   = Σ(today_saved) where today_saved = max(0, daily_limit - daily_spent)
+        // - remaining     = goal_save - total_saved
+        // - percentage    = (total_saved / goal_save) * 100
+        $derived = $this->savingsCalculation->getGoalDerived($goal);
+        $tracking = $this->savingsCalculation->getTracking($goal);
+
+        $targetSaving = $derived['goal_save'];
+        $totalSaved = $tracking['total_saved'];
+        $progressPercent = $tracking['goal_completion_percent'];
+
         $startDate = Carbon::parse($goal->start_date)->startOfDay();
         $endDate = Carbon::parse($goal->end_date)->startOfDay();
         $totalDays = max(1, $startDate->diffInDays($endDate) + 1);
-        $targetSaving = (float) ($goal->target_amount ?? 0);
-        $monthlyIncome = (float) ($goal->monthly_income ?? 0);
-        // total_spend_allowed = monthly_income - target_amount; calculate if null (for existing goals).
-        $totalSpendAllowed = (float) ($goal->total_spend_allowed ?? 0);
-        if ($totalSpendAllowed <= 0) {
-            $totalSpendAllowed = max(0, $monthlyIncome - $targetSaving);
-        }
-        $dailyBudget = (float) ($goal->daily_target ?? 0);
 
         // Total spent = sum of all check-ins' daily_spent_amount (or amount_spending for legacy).
         $totalSpent = (float) $goal->checkIns()->get()->sum(function ($c) {
             return (float) ($c->daily_spent_amount ?? $c->amount_spending ?? 0);
         });
 
-        // Total saved = total_spend_allowed - total_spent (simpler calculation).
-        $totalSaved = max(0, $totalSpendAllowed - $totalSpent);
-
-        // Remaining saving = target_saving - total_saved (can be negative if ahead).
         $remainingSaving = $targetSaving - $totalSaved;
         $spendingAmount = $totalSpent;
 
-        // Progress percentage = (total_saved / target_saving) * 100; clamp 0–100 for display.
-        $progressPercent = $targetSaving > 0
-            ? min(100.0, max(0.0, ($totalSaved / $targetSaving) * 100))
-            : 0.0;
+        // total_spend_allowed = monthly_income - target_amount (or fallback via derived).
+        $totalSpendAllowed = $derived['total_spend_allowed'];
+        $dailyBudget = (float) ($goal->daily_target ?? 0);
 
         $today = Carbon::today()->startOfDay();
         $effectiveToday = $today->lte($endDate) ? $today : $endDate;
