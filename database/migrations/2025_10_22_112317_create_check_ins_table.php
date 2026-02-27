@@ -18,6 +18,11 @@ return new class extends Migration
             $table->decimal('amount_saved', 15, 2)->nullable();
             $table->decimal('target_amount', 15, 2)->nullable();
             $table->date('check_date');
+            $table->string('spending_type')->nullable();
+            $table->string('spending_name')->nullable();
+            $table->text('note')->nullable();
+            $table->decimal('daily_spent_amount', 15, 2)->nullable();
+            $table->decimal('calculated_daily_save', 15, 2)->nullable();
             $table->string('status')->default('completed');
             $table->timestamps();
         });
