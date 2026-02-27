@@ -25,8 +25,7 @@ class CheckInController extends Controller
     {
         try {
             $checkIns = $this->checkInService->index($request);
-
-            return Helper::jsonResponse(true, 'Check-ins fetched successfully', 200, $checkIns, true);
+            return Helper::jsonResponse(true, 'Check-ins fetched successfully', 200, $checkIns);
         } catch (Exception $e) {
             Log::error('CheckInController::index' . $e->getMessage());
 
@@ -35,26 +34,35 @@ class CheckInController extends Controller
     }
 
     /**
-     * Store a newly created resource in storage.
+     * Store a new check-in. Backward compatible:
+     * - If daily_spent_amount (or amount_spending) provided → system calculates savings (no negative savings).
+     * - Else if amount_saved provided → legacy flow.
+     * At least one of daily_spent_amount, amount_spending, or amount_saved is required.
      */
     public function store(Request $request)
     {
         $validateData = $request->validate([
-            // We always attach the active goal internally.
-            'amount_spending' => 'required|numeric|min:0.01',
-            'amount_saved' => 'nullable|numeric|min:0.01',
+            'daily_spent_amount' => 'nullable|numeric|min:0',
+            'amount_spending' => 'nullable|numeric|min:0',
+            'amount_saved' => 'nullable|numeric|min:0',
+            'check_date' => 'nullable|date',
             'spending_type' => 'nullable|string|max:191',
             'spending_name' => 'nullable|string|max:191',
             'note' => 'nullable|string',
         ]);
+        if (
+            ! array_key_exists('daily_spent_amount', $validateData) &&
+            ! array_key_exists('amount_spending', $validateData) &&
+            ! array_key_exists('amount_saved', $validateData)
+        ) {
+            return Helper::jsonErrorResponse('At least one of daily_spent_amount, amount_spending, or amount_saved is required.', 422);
+        }
 
         try {
             $checkIn = $this->checkInService->store($validateData);
-
             return Helper::jsonResponse(true, 'Check-in created successfully', 200, $checkIn);
         } catch (Exception $e) {
             Log::error('CheckInController::store' . $e->getMessage());
-
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
     }
@@ -81,11 +89,12 @@ class CheckInController extends Controller
     public function update(Request $request, string $id)
     {
         $validateData = $request->validate([
-            'goal_id' => 'required|integer|exists:goals,id',
+            'goal_id' => 'nullable|integer|exists:goals,id',
+            'daily_spent_amount' => 'nullable|numeric|min:0',
             'amount_spending' => 'nullable|numeric|min:0',
             'amount_saved' => 'nullable|numeric|min:0',
             'target_amount' => 'nullable|numeric|min:0',
-            'check_date' => 'required|date',
+            'check_date' => 'nullable|date',
             'status' => 'nullable|string|in:completed,pending,cancelled',
         ]);
 

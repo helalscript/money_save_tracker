@@ -26,18 +26,20 @@ class ProgressPageService
         try {
             $activeGoal = $this->goalService->getActiveGoal();
             
+            // total_saved = sum of daily_saved from check-ins; remaining = target - total_saved.
+            $totalSaved = $activeGoal ? (float) ($activeGoal['others_data']['saved_amount'] ?? 0) : 0;
             $journey = [
-                // Savings are no longer the core metric; expose spending journey.
-                'total_saved' => 0,
+                'total_saved' => $activeGoal ? number_format($totalSaved) : 0,
                 'total_spending' => $activeGoal ? number_format($activeGoal['others_data']['spending_amount']) : 0,
                 'goal_target' => $activeGoal ? number_format($activeGoal['target_amount']) : 0,
-                // This now represents percentage of the budget that has been used.
                 'progress_percentage' => $activeGoal ? $activeGoal['others_data']['persantage_progress'] : 0,
             ];
             $best_day_saving = number_format($this->goalService->bestDaySaving() ?? 0);
             $daily_average_saving = number_format($this->goalService->dailyAverageSaving() ?? 0);
             $steak_record = $activeGoal ? $activeGoal['current_streak'] : 0;
-            $meeting_daily_target = 'On-Track';
+            $meeting_daily_target = $activeGoal && isset($activeGoal['others_data']['status_message'])
+                ? (str_contains($activeGoal['others_data']['status_message'], 'early') ? 'On-Track' : 'Need to save more')
+                : 'On-Track';
 
             $data = [
                 'journey' => $journey,
