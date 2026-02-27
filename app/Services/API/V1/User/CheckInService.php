@@ -73,7 +73,6 @@ class CheckInService
             $payload = $this->savingsCalculation->buildProgressPayload($activeGoal);
             $derived = $this->savingsCalculation->getGoalDerived($activeGoal);
             $perDayAllowedSpend = $derived['per_day_allowed_spend'];
-            $perDaySaveTarget = $derived['per_day_save_target'];
 
             // Today: if multiple check-ins on same day, sum all daily_spent_amount for that date.
             $todayCheckIns = CheckIn::where('goal_id', $activeGoal->id)
@@ -84,12 +83,11 @@ class CheckInService
                 $totalDailySpent = (float) $todayCheckIns->sum(function ($c) {
                     return (float) ($c->daily_spent_amount ?? $c->amount_spending ?? 0);
                 });
-                // Total daily save = per_day_save_target + (per_day_allowed_spend - total_daily_spent) if within limit, else 0.
-                $totalDailySave = 0;
-                if ($totalDailySpent <= $perDayAllowedSpend) {
-                    $bonus = $perDayAllowedSpend - $totalDailySpent;
-                    $totalDailySave = round($perDaySaveTarget + $bonus, 2);
-                }
+                // today_saved = max(0, daily_limit - total_daily_spent)
+                $totalDailySave = $this->savingsCalculation->calculateDailySave(
+                    $perDayAllowedSpend,
+                    $totalDailySpent
+                );
                 $payload['today'] = ['spent' => round($totalDailySpent, 2), 'saved' => $totalDailySave];
             }
 
@@ -145,7 +143,6 @@ class CheckInService
 
             $derived = $this->savingsCalculation->getGoalDerived($goal);
             $perDayAllowedSpend = $derived['per_day_allowed_spend'];
-            $perDaySaveTarget = $derived['per_day_save_target'];
 
             // Resolve check_date: from request or now().
             $checkDate = isset($validatedData['check_date']) ? Carbon::parse($validatedData['check_date'])->startOfDay() : Carbon::today();
@@ -168,16 +165,12 @@ class CheckInService
                     ->sum('daily_spent_amount');
                 $totalDailySpent = $existingDailySpent + $dailySpent;
 
-                // Calculate daily_save based on total daily spent for that day.
-                // daily_save = per_day_save_target + (per_day_allowed_spend - total_daily_spent) if within limit, else 0.
-                if ($totalDailySpent > $perDayAllowedSpend) {
-                    // Overspending: no savings for this check-in (total daily spent exceeds limit).
-                    $calculatedDailySave = 0;
-                } else {
-                    // Within limit: per_day_save_target + (per_day_allowed_spend - total_daily_spent).
-                    $bonus = $perDayAllowedSpend - $totalDailySpent;
-                    $calculatedDailySave = round($perDaySaveTarget + $bonus, 2);
-                }
+                // today_saved = max(0, daily_limit - total_daily_spent)
+                $calculatedDailySave = $this->savingsCalculation->calculateDailySave(
+                    $perDayAllowedSpend,
+                    $totalDailySpent
+                );
+
                 $amountSaved = $calculatedDailySave; // legacy field for backward compat
             } elseif (array_key_exists('amount_saved', $validatedData) && $validatedData['amount_saved'] !== '' && $validatedData['amount_saved'] !== null) {
                 // Legacy: use saved_amount; never store negative.
@@ -263,7 +256,6 @@ class CheckInService
             }
             $derived = $this->savingsCalculation->getGoalDerived($goal);
             $perDayAllowedSpend = $derived['per_day_allowed_spend'];
-            $perDaySaveTarget = $derived['per_day_save_target'];
             // Recompute calculated_daily_save when daily_spent or amount_spending (legacy) changes.
             $dailySpent = $validatedData['daily_spent_amount'] ?? $validatedData['amount_spending'] ?? null;
             if ($dailySpent !== null && $dailySpent !== '') {
@@ -276,13 +268,12 @@ class CheckInService
                     ->where('id', '!=', $checkIn->id) // Exclude current check-in being updated.
                     ->sum('daily_spent_amount');
                 $totalDailySpent = $existingDailySpent + (float) $dailySpent;
-                // Calculate daily_save based on total daily spent for that day.
-                if ($totalDailySpent > $perDayAllowedSpend) {
-                    $validatedData['calculated_daily_save'] = 0;
-                } else {
-                    $bonus = $perDayAllowedSpend - $totalDailySpent;
-                    $validatedData['calculated_daily_save'] = round($perDaySaveTarget + $bonus, 2);
-                }
+
+                // আজকে বেঁচেছে = max(0, daily_limit - total_daily_spent)
+                $validatedData['calculated_daily_save'] = $this->savingsCalculation->calculateDailySave(
+                    $perDayAllowedSpend,
+                    $totalDailySpent
+                );
                 $validatedData['amount_saved'] = $validatedData['calculated_daily_save'];
             } elseif (array_key_exists('amount_saved', $validatedData) && $validatedData['amount_saved'] !== null && $validatedData['amount_saved'] !== '') {
                 $validatedData['calculated_daily_save'] = max(0, (float) $validatedData['amount_saved']);
