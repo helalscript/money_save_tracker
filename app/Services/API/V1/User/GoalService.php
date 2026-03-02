@@ -429,6 +429,7 @@ class GoalService
 
             $derived = $this->savingsCalculation->getGoalDerived($goal);
             $perDayAllowedSpend = $derived['per_day_allowed_spend'];
+            $perDaySaveTarget = $derived['per_day_save_target'];
 
             // Very old goals without a defined daily limit fall back to legacy behaviour.
             if ($perDayAllowedSpend <= 0) {
@@ -466,7 +467,11 @@ class GoalService
                     return (float) ($row->daily_spent_amount ?? $row->amount_spending ?? 0);
                 });
 
-                $todaySaved = $this->savingsCalculation->calculateDailySave($perDayAllowedSpend, $totalDailySpent);
+                $todaySaved = $this->savingsCalculation->calculateDailySave(
+                    $perDayAllowedSpend,
+                    $perDaySaveTarget,
+                    $totalDailySpent
+                );
                 if ($todaySaved > $bestDaySaved) {
                     $bestDaySaved = $todaySaved;
                 }
