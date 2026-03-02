@@ -73,6 +73,7 @@ class CheckInService
             $payload = $this->savingsCalculation->buildProgressPayload($activeGoal);
             $derived = $this->savingsCalculation->getGoalDerived($activeGoal);
             $perDayAllowedSpend = $derived['per_day_allowed_spend'];
+            $perDaySaveTarget = $derived['per_day_save_target'];
 
             // Today: if multiple check-ins on same day, sum all daily_spent_amount for that date.
             $todayCheckIns = CheckIn::where('goal_id', $activeGoal->id)
@@ -83,9 +84,10 @@ class CheckInService
                 $totalDailySpent = (float) $todayCheckIns->sum(function ($c) {
                     return (float) ($c->daily_spent_amount ?? $c->amount_spending ?? 0);
                 });
-                // today_saved = max(0, daily_limit - total_daily_spent)
+                // today_saved = per_day_save_target + (daily_limit - total_daily_spent) if within limit; else 0
                 $totalDailySave = $this->savingsCalculation->calculateDailySave(
                     $perDayAllowedSpend,
+                    $perDaySaveTarget,
                     $totalDailySpent
                 );
                 $payload['today'] = ['spent' => round($totalDailySpent, 2), 'saved' => $totalDailySave];
@@ -95,7 +97,32 @@ class CheckInService
                 ->orderBy('check_date', 'desc')
                 ->paginate($perPage);
 
-            $payload['check_ins'] = $checkIns->items();
+            // Recalculate per-day saved for each date from raw spending,
+            // so that response is always consistent with the latest formula.
+            $perDaySaveTarget = $derived['per_day_save_target'];
+            $collection = $checkIns->getCollection();
+            $byDate = $collection->groupBy(function ($row) {
+                return $row->check_date ? $row->check_date->toDateString() : null;
+            });
+            foreach ($byDate as $date => $rows) {
+                if ($date === null) {
+                    continue;
+                }
+                $totalDailySpent = (float) $rows->sum(function ($row) {
+                    return (float) ($row->daily_spent_amount ?? $row->amount_spending ?? 0);
+                });
+                $todaySaved = $this->savingsCalculation->calculateDailySave(
+                    $perDayAllowedSpend,
+                    $perDaySaveTarget,
+                    $totalDailySpent
+                );
+                foreach ($rows as $row) {
+                    $row->calculated_daily_save = $todaySaved;
+                    $row->amount_saved = $todaySaved;
+                }
+            }
+
+            $payload['check_ins'] = $collection->values();
             $payload['pagination'] = [
                 'current_page' => $checkIns->currentPage(),
                 'last_page' => $checkIns->lastPage(),
@@ -111,7 +138,7 @@ class CheckInService
             ];
             // Backward compatibility: legacy keys for existing clients.
             $derived = $this->savingsCalculation->getGoalDerived($activeGoal);
-            $payload['total_amount_spending'] = (int) $checkIns->getCollection()->sum(function ($c) {
+            $payload['total_amount_spending'] = (int) $collection->sum(function ($c) {
                 return (float) ($c->daily_spent_amount ?? $c->amount_spending ?? 0);
             });
             $payload['total_amount_saved'] = (int) round($payload['progress']['total_saved']);
@@ -143,6 +170,7 @@ class CheckInService
 
             $derived = $this->savingsCalculation->getGoalDerived($goal);
             $perDayAllowedSpend = $derived['per_day_allowed_spend'];
+            $perDaySaveTarget = $derived['per_day_save_target'];
 
             // Resolve check_date: from request or now().
             $checkDate = isset($validatedData['check_date']) ? Carbon::parse($validatedData['check_date'])->startOfDay() : Carbon::today();
@@ -165,9 +193,10 @@ class CheckInService
                     ->sum('daily_spent_amount');
                 $totalDailySpent = $existingDailySpent + $dailySpent;
 
-                // today_saved = max(0, daily_limit - total_daily_spent)
+                // today_saved = per_day_save_target + (daily_limit - total_daily_spent) if within limit; else 0
                 $calculatedDailySave = $this->savingsCalculation->calculateDailySave(
                     $perDayAllowedSpend,
+                    $perDaySaveTarget,
                     $totalDailySpent
                 );
 
@@ -256,6 +285,7 @@ class CheckInService
             }
             $derived = $this->savingsCalculation->getGoalDerived($goal);
             $perDayAllowedSpend = $derived['per_day_allowed_spend'];
+            $perDaySaveTarget = $derived['per_day_save_target'];
             // Recompute calculated_daily_save when daily_spent or amount_spending (legacy) changes.
             $dailySpent = $validatedData['daily_spent_amount'] ?? $validatedData['amount_spending'] ?? null;
             if ($dailySpent !== null && $dailySpent !== '') {
@@ -269,9 +299,10 @@ class CheckInService
                     ->sum('daily_spent_amount');
                 $totalDailySpent = $existingDailySpent + (float) $dailySpent;
 
-                // আজকে বেঁচেছে = max(0, daily_limit - total_daily_spent)
+                // আজকে বেঁচেছে = per_day_save_target + (daily_limit - total_daily_spent) if within limit; else 0
                 $validatedData['calculated_daily_save'] = $this->savingsCalculation->calculateDailySave(
                     $perDayAllowedSpend,
+                    $perDaySaveTarget,
                     $totalDailySpent
                 );
                 $validatedData['amount_saved'] = $validatedData['calculated_daily_save'];
@@ -377,20 +408,54 @@ class CheckInService
 
     /**
      * Build per-day stats first, so that:
-     * - amount_spending = Σ (daily_spent_amount / amount_spending) for that date
-     * - amount_saved_target = each goal's target should be counted only once for each date
-     * - amount_saved = calculateDailySave(amount_saved_target, amount_spending)
+     * - amount_spending      = Σ (daily_spent_amount / amount_spending) for that date (all goals)
+     * - amount_saved_target  = Σ (per-day allowed spend) for each goal on that date
+     * - amount_saved         = Σ (per-goal today_saved) where:
+     *       per-goal today_saved = calculateDailySave(per_day_allowed_spend, per_day_save_target, total_spent_for_goal_on_that_date)
      *
      * This ensures:
-     * - if there are multiple check-ins on the same day, saved and target should not be counted twice.
+     * - per day calculation is done only once for each goal, even if there are multiple check-ins on that day.
      */
     private function buildPerDayStats($checkIns): array
     {
+        if ($checkIns->isEmpty()) {
+            return [];
+        }
+
+        // Preload per-goal derived values to avoid N+1 queries.
+        $goalIds = $checkIns->pluck('goal_id')->filter()->unique()->all();
+        $goals = Goal::whereIn('id', $goalIds)->get()->keyBy('id');
+
+        // Group by (date, goal_id) first.
+        $byDateGoal = $checkIns->groupBy(function ($row) {
+            $date = $row->check_date ? $row->check_date->toDateString() : null;
+            $goalId = $row->goal_id ?? null;
+            return $date && $goalId ? $date.'|'.$goalId : null;
+        });
+
         $perDay = [];
 
-        foreach ($checkIns as $checkIn) {
-            $date = $checkIn->check_date->toDateString();
-            $dayName = $checkIn->check_date->format('D'); // Sat, Sun, Mon
+        foreach ($byDateGoal as $key => $rows) {
+            if ($key === null) {
+                continue;
+            }
+            [$date, $goalId] = explode('|', $key);
+            $goalId = (int) $goalId;
+
+            if (!isset($goals[$goalId])) {
+                continue;
+            }
+            /** @var Goal $goalModel */
+            $goalModel = $goals[$goalId];
+            $derived = $this->savingsCalculation->getGoalDerived($goalModel);
+            $limit = (float) ($derived['per_day_allowed_spend'] ?? 0);
+            $perDaySaveTarget = (float) ($derived['per_day_save_target'] ?? 0);
+
+            $totalSpentForGoalDate = (float) $rows->sum(function ($row) {
+                return (float) ($row->daily_spent_amount ?? $row->amount_spending ?? 0);
+            });
+
+            $dayName = $rows->first()->check_date->format('D');
 
             if (!isset($perDay[$date])) {
                 $perDay[$date] = [
@@ -399,31 +464,17 @@ class CheckInService
                     'amount_saved' => 0.0,
                     'amount_spending' => 0.0,
                     'amount_saved_target' => 0.0,
-                    // each goal's target should be counted only once for each date
-                    '_counted_goals' => [],
                 ];
             }
 
-            // total spending = sum of all check-ins' spending for that date
-            $spent = (float) ($checkIn->daily_spent_amount ?? $checkIn->amount_spending ?? 0);
-            $perDay[$date]['amount_spending'] += $spent;
-
-            // each goal's daily target should be counted only once for each date (if the same goal + date, it should not be counted again)
-            $goalId = $checkIn->goal_id ?? null;
-            if ($goalId !== null && !in_array($goalId, $perDay[$date]['_counted_goals'], true)) {
-                $perDay[$date]['amount_saved_target'] += (float) $checkIn->target_amount;
-                $perDay[$date]['_counted_goals'][] = $goalId;
-            }
+            $perDay[$date]['amount_spending'] += $totalSpentForGoalDate;
+            $perDay[$date]['amount_saved_target'] += $limit;
+            $perDay[$date]['amount_saved'] += $this->savingsCalculation->calculateDailySave(
+                $limit,
+                $perDaySaveTarget,
+                $totalSpentForGoalDate
+            );
         }
-
-        // now calculate saved for each date: today_saved = max(0, daily_limit - total_spent)
-        foreach ($perDay as &$row) {
-            $limit = (float) $row['amount_saved_target'];
-            $spent = (float) $row['amount_spending'];
-            $row['amount_saved'] = $this->savingsCalculation->calculateDailySave($limit, $spent);
-            unset($row['_counted_goals']);
-        }
-        unset($row);
 
         // sort by date
         ksort($perDay);
