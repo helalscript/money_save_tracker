@@ -127,11 +127,9 @@ class CheckInController extends Controller
     {
         try {
             $checkIns = $this->checkInService->checkInsActivity($request);
-
-            // return Helper::jsonResponse(true, 'Check-ins fetched successfully', 200, $checkIns);
             return $checkIns;
         } catch (Exception $e) {
-            Log::error('CheckInController::index' . $e->getMessage());
+            Log::error('CheckInController::checkInsActivity' . $e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }

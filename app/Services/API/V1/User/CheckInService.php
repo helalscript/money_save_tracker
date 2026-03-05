@@ -73,6 +73,7 @@ class CheckInService
             $payload = $this->savingsCalculation->buildProgressPayload($activeGoal);
             $derived = $this->savingsCalculation->getGoalDerived($activeGoal);
             $perDayAllowedSpend = $derived['per_day_allowed_spend'];
+            $perDaySaveTarget = $derived['per_day_save_target'];
 
             // Today: if multiple check-ins on same day, sum all daily_spent_amount for that date.
             $todayCheckIns = CheckIn::where('goal_id', $activeGoal->id)
@@ -83,9 +84,10 @@ class CheckInService
                 $totalDailySpent = (float) $todayCheckIns->sum(function ($c) {
                     return (float) ($c->daily_spent_amount ?? $c->amount_spending ?? 0);
                 });
-                // today_saved = max(0, daily_limit - total_daily_spent)
+                // today_saved = per_day_save_target + (daily_limit - total_daily_spent) if within limit; else 0
                 $totalDailySave = $this->savingsCalculation->calculateDailySave(
                     $perDayAllowedSpend,
+                    $perDaySaveTarget,
                     $totalDailySpent
                 );
                 $payload['today'] = ['spent' => round($totalDailySpent, 2), 'saved' => $totalDailySave];
@@ -95,7 +97,32 @@ class CheckInService
                 ->orderBy('check_date', 'desc')
                 ->paginate($perPage);
 
-            $payload['check_ins'] = $checkIns->items();
+            // Recalculate per-day saved for each date from raw spending,
+            // so that response is always consistent with the latest formula.
+            $perDaySaveTarget = $derived['per_day_save_target'];
+            $collection = $checkIns->getCollection();
+            $byDate = $collection->groupBy(function ($row) {
+                return $row->check_date ? $row->check_date->toDateString() : null;
+            });
+            foreach ($byDate as $date => $rows) {
+                if ($date === null) {
+                    continue;
+                }
+                $totalDailySpent = (float) $rows->sum(function ($row) {
+                    return (float) ($row->daily_spent_amount ?? $row->amount_spending ?? 0);
+                });
+                $todaySaved = $this->savingsCalculation->calculateDailySave(
+                    $perDayAllowedSpend,
+                    $perDaySaveTarget,
+                    $totalDailySpent
+                );
+                foreach ($rows as $row) {
+                    $row->calculated_daily_save = $todaySaved;
+                    $row->amount_saved = $todaySaved;
+                }
+            }
+
+            $payload['check_ins'] = $collection->values();
             $payload['pagination'] = [
                 'current_page' => $checkIns->currentPage(),
                 'last_page' => $checkIns->lastPage(),
@@ -111,7 +138,7 @@ class CheckInService
             ];
             // Backward compatibility: legacy keys for existing clients.
             $derived = $this->savingsCalculation->getGoalDerived($activeGoal);
-            $payload['total_amount_spending'] = (int) $checkIns->getCollection()->sum(function ($c) {
+            $payload['total_amount_spending'] = (int) $collection->sum(function ($c) {
                 return (float) ($c->daily_spent_amount ?? $c->amount_spending ?? 0);
             });
             $payload['total_amount_saved'] = (int) round($payload['progress']['total_saved']);
@@ -143,6 +170,7 @@ class CheckInService
 
             $derived = $this->savingsCalculation->getGoalDerived($goal);
             $perDayAllowedSpend = $derived['per_day_allowed_spend'];
+            $perDaySaveTarget = $derived['per_day_save_target'];
 
             // Resolve check_date: from request or now().
             $checkDate = isset($validatedData['check_date']) ? Carbon::parse($validatedData['check_date'])->startOfDay() : Carbon::today();
@@ -165,9 +193,10 @@ class CheckInService
                     ->sum('daily_spent_amount');
                 $totalDailySpent = $existingDailySpent + $dailySpent;
 
-                // today_saved = max(0, daily_limit - total_daily_spent)
+                // today_saved = per_day_save_target + (daily_limit - total_daily_spent) if within limit; else 0
                 $calculatedDailySave = $this->savingsCalculation->calculateDailySave(
                     $perDayAllowedSpend,
+                    $perDaySaveTarget,
                     $totalDailySpent
                 );
 
@@ -256,6 +285,7 @@ class CheckInService
             }
             $derived = $this->savingsCalculation->getGoalDerived($goal);
             $perDayAllowedSpend = $derived['per_day_allowed_spend'];
+            $perDaySaveTarget = $derived['per_day_save_target'];
             // Recompute calculated_daily_save when daily_spent or amount_spending (legacy) changes.
             $dailySpent = $validatedData['daily_spent_amount'] ?? $validatedData['amount_spending'] ?? null;
             if ($dailySpent !== null && $dailySpent !== '') {
@@ -269,9 +299,10 @@ class CheckInService
                     ->sum('daily_spent_amount');
                 $totalDailySpent = $existingDailySpent + (float) $dailySpent;
 
-                // আজকে বেঁচেছে = max(0, daily_limit - total_daily_spent)
+                // আজকে বেঁচেছে = per_day_save_target + (daily_limit - total_daily_spent) if within limit; else 0
                 $validatedData['calculated_daily_save'] = $this->savingsCalculation->calculateDailySave(
                     $perDayAllowedSpend,
+                    $perDaySaveTarget,
                     $totalDailySpent
                 );
                 $validatedData['amount_saved'] = $validatedData['calculated_daily_save'];
@@ -364,59 +395,108 @@ class CheckInService
 
     private function groupCheckIns($checkIns, $groupBy)
     {
-        $grouped = [];
-
         switch ($groupBy) {
             case 'weekly':
-                $grouped = $this->groupByWeek($checkIns);
-                break;
+                return $this->groupByWeek($checkIns);
             case 'monthly':
-                $grouped = $this->groupByMonth($checkIns);
-                break;
+                return $this->groupByMonth($checkIns);
             case 'daily':
             default:
-                $grouped = $this->groupByDay($checkIns);
-                break;
+                return $this->groupByDay($checkIns);
+        }
+    }
+
+    /**
+     * Build per-day stats first, so that:
+     * - amount_spending      = Σ (daily_spent_amount / amount_spending) for that date (all goals)
+     * - amount_saved_target  = Σ (per-day allowed spend) for each goal on that date
+     * - amount_saved         = Σ (per-goal today_saved) where:
+     *       per-goal today_saved = calculateDailySave(per_day_allowed_spend, per_day_save_target, total_spent_for_goal_on_that_date)
+     *
+     * This ensures:
+     * - per day calculation is done only once for each goal, even if there are multiple check-ins on that day.
+     */
+    private function buildPerDayStats($checkIns): array
+    {
+        if ($checkIns->isEmpty()) {
+            return [];
         }
 
-        return $grouped;
+        // Preload per-goal derived values to avoid N+1 queries.
+        $goalIds = $checkIns->pluck('goal_id')->filter()->unique()->all();
+        $goals = Goal::whereIn('id', $goalIds)->get()->keyBy('id');
+
+        // Group by (date, goal_id) first.
+        $byDateGoal = $checkIns->groupBy(function ($row) {
+            $date = $row->check_date ? $row->check_date->toDateString() : null;
+            $goalId = $row->goal_id ?? null;
+            return $date && $goalId ? $date.'|'.$goalId : null;
+        });
+
+        $perDay = [];
+
+        foreach ($byDateGoal as $key => $rows) {
+            if ($key === null) {
+                continue;
+            }
+            [$date, $goalId] = explode('|', $key);
+            $goalId = (int) $goalId;
+
+            if (!isset($goals[$goalId])) {
+                continue;
+            }
+            /** @var Goal $goalModel */
+            $goalModel = $goals[$goalId];
+            $derived = $this->savingsCalculation->getGoalDerived($goalModel);
+            $limit = (float) ($derived['per_day_allowed_spend'] ?? 0);
+            $perDaySaveTarget = (float) ($derived['per_day_save_target'] ?? 0);
+
+            $totalSpentForGoalDate = (float) $rows->sum(function ($row) {
+                return (float) ($row->daily_spent_amount ?? $row->amount_spending ?? 0);
+            });
+
+            $dayName = $rows->first()->check_date->format('D');
+
+            if (!isset($perDay[$date])) {
+                $perDay[$date] = [
+                    'date' => $date,
+                    'day_name' => $dayName,
+                    'amount_saved' => 0.0,
+                    'amount_spending' => 0.0,
+                    'amount_saved_target' => 0.0,
+                ];
+            }
+
+            $perDay[$date]['amount_spending'] += $totalSpentForGoalDate;
+            $perDay[$date]['amount_saved_target'] += $limit;
+            $perDay[$date]['amount_saved'] += $this->savingsCalculation->calculateDailySave(
+                $limit,
+                $perDaySaveTarget,
+                $totalSpentForGoalDate
+            );
+        }
+
+        // sort by date
+        ksort($perDay);
+
+        return array_values($perDay);
     }
 
     private function groupByDay($checkIns)
     {
-        $dailyData = [];
-
-        foreach ($checkIns as $checkIn) {
-            $date = $checkIn->check_date->format('Y-m-d');
-            $dayName = $checkIn->check_date->format('D'); // Sat, Sun, Mon
-
-            if (!isset($dailyData[$date])) {
-                $dailyData[$date] = [
-                    'date' => $date,
-                    'day_name' => $dayName,
-                    'amount_saved' => 0,
-                    'amount_spending' => 0,
-                    'amount_saved_target' => 0,
-                    // 'check_ins' => [],
-                ];
-            }
-
-            $dailyData[$date]['amount_saved'] += (float) $checkIn->amount_saved;
-            $dailyData[$date]['amount_spending'] += (float) $checkIn->amount_spending;
-            $dailyData[$date]['amount_saved_target'] += (float) $checkIn->target_amount;
-            // $dailyData[$date]['check_ins'][] = $checkIn;
-        }
-
-        return array_values($dailyData);
+        return $this->buildPerDayStats($checkIns);
     }
 
     private function groupByWeek($checkIns)
     {
+        $daily = $this->buildPerDayStats($checkIns);
         $weeklyData = [];
 
-        foreach ($checkIns as $checkIn) {
-            $year = $checkIn->check_date->format('Y');
-            $week = $checkIn->check_date->format('W');
+        foreach ($daily as $day) {
+            $date = $day['date'];
+            $carbon = Carbon::parse($date);
+            $year = $carbon->format('Y');
+            $week = $carbon->format('W');
             $key = $year . '-W' . $week;
 
             if (!isset($weeklyData[$key])) {
@@ -425,51 +505,54 @@ class CheckInService
                     'year' => $year,
                     'week_number' => (int) $week,
                     'week_key' => $key,
-                    'start_date' => $checkIn->check_date->startOfWeek()->format('Y-m-d'),
-                    'end_date' => $checkIn->check_date->endOfWeek()->format('Y-m-d'),
-                    'amount_saved' => 0,
-                    'amount_spending' => 0,
-                    'amount_saved_target' => 0,
-                    // 'check_ins' => [],
+                    'start_date' => $carbon->copy()->startOfWeek()->format('Y-m-d'),
+                    'end_date' => $carbon->copy()->endOfWeek()->format('Y-m-d'),
+                    'amount_saved' => 0.0,
+                    'amount_spending' => 0.0,
+                    'amount_saved_target' => 0.0,
                 ];
             }
 
-            $weeklyData[$key]['amount_saved'] += (float) $checkIn->amount_saved;
-            $weeklyData[$key]['amount_spending'] += (float) $checkIn->amount_spending;
-            $weeklyData[$key]['amount_saved_target'] += (float) $checkIn->target_amount;
-            // $weeklyData[$key]['check_ins'][] = $checkIn;
+            $weeklyData[$key]['amount_saved'] += (float) $day['amount_saved'];
+            $weeklyData[$key]['amount_spending'] += (float) $day['amount_spending'];
+            $weeklyData[$key]['amount_saved_target'] += (float) $day['amount_saved_target'];
         }
+
+        // sort by key
+        ksort($weeklyData);
 
         return array_values($weeklyData);
     }
 
     private function groupByMonth($checkIns)
     {
+        $daily = $this->buildPerDayStats($checkIns);
         $monthlyData = [];
 
-        foreach ($checkIns as $checkIn) {
-            $monthKey = $checkIn->check_date->format('Y-m');
-            // $monthName = $checkIn->check_date->format('F Y'); // January 2025
-            $monthName = $checkIn->check_date->format('F'); // January 2025
+        foreach ($daily as $day) {
+            $date = $day['date'];
+            $carbon = Carbon::parse($date);
+            $monthKey = $carbon->format('Y-m');
+            $monthName = $carbon->format('F');
 
             if (!isset($monthlyData[$monthKey])) {
                 $monthlyData[$monthKey] = [
                     'month' => $monthName,
                     'month_key' => $monthKey,
-                    'year' => $checkIn->check_date->format('Y'),
-                    'month_number' => $checkIn->check_date->format('m'),
-                    'amount_saved' => 0,
-                    'amount_spending' => 0,
-                    'amount_saved_target' => 0,
-                    // 'check_ins' => [],
+                    'year' => $carbon->format('Y'),
+                    'month_number' => $carbon->format('m'),
+                    'amount_saved' => 0.0,
+                    'amount_spending' => 0.0,
+                    'amount_saved_target' => 0.0,
                 ];
             }
 
-            $monthlyData[$monthKey]['amount_saved'] += (float) $checkIn->amount_saved;
-            $monthlyData[$monthKey]['amount_spending'] += (float) $checkIn->amount_spending;
-            $monthlyData[$monthKey]['amount_saved_target'] += (float) $checkIn->target_amount;
-            // $monthlyData[$monthKey]['check_ins'][] = $checkIn;
+            $monthlyData[$monthKey]['amount_saved'] += (float) $day['amount_saved'];
+            $monthlyData[$monthKey]['amount_spending'] += (float) $day['amount_spending'];
+            $monthlyData[$monthKey]['amount_saved_target'] += (float) $day['amount_saved_target'];
         }
+
+        ksort($monthlyData);
 
         return array_values($monthlyData);
     }

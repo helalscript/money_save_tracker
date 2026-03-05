@@ -417,10 +417,6 @@ class GoalService
         ];
     }
 
-    /**
-     * Best single-day saved amount = max over check-ins of (daily_saved_amount).
-     * Uses amount_saved when set; else daily_budget - amount_spending (clamped >= 0 for "best day").
-     */
     public function bestDaySaving()
     {
         try {
@@ -431,21 +427,57 @@ class GoalService
                 return 0;
             }
 
-            $bestMargin = 0;
-            foreach ($checkIns as $checkIn) {
-                $saved = $checkIn->amount_saved;
-                if ($saved !== null && (string) $saved !== '') {
-                    $margin = max(0, (float) $saved);
-                } else {
-                    $dailyLimit = (float) ($checkIn->target_amount ?? 0);
-                    $spent = (float) ($checkIn->amount_spending ?? 0);
-                    $margin = max(0, $dailyLimit - $spent);
+            $derived = $this->savingsCalculation->getGoalDerived($goal);
+            $perDayAllowedSpend = $derived['per_day_allowed_spend'];
+            $perDaySaveTarget = $derived['per_day_save_target'];
+
+            // Very old goals without a defined daily limit fall back to legacy behaviour.
+            if ($perDayAllowedSpend <= 0) {
+                $bestMargin = 0;
+                foreach ($checkIns as $checkIn) {
+                    $saved = $checkIn->amount_saved;
+                    if ($saved !== null && (string) $saved !== '') {
+                        $margin = max(0, (float) $saved);
+                    } else {
+                        $dailyLimit = (float) ($checkIn->target_amount ?? 0);
+                        $spent = (float) ($checkIn->amount_spending ?? 0);
+                        $margin = max(0, $dailyLimit - $spent);
+                    }
+                    if ($margin > $bestMargin) {
+                        $bestMargin = $margin;
+                    }
                 }
-                if ($margin > $bestMargin) {
-                    $bestMargin = $margin;
+
+                return $bestMargin;
+            }
+
+            // New behaviour: best "single day" is the max of today's saved across calendar dates:
+            // today_saved(date) = max(0, daily_limit - Σ(daily_spent_amount for that date)).
+            $groupedByDate = $checkIns->groupBy(function ($row) {
+                return $row->check_date ? $row->check_date->toDateString() : null;
+            });
+
+            $bestDaySaved = 0.0;
+            foreach ($groupedByDate as $date => $rows) {
+                if ($date === null) {
+                    continue;
+                }
+
+                $totalDailySpent = (float) $rows->sum(function ($row) {
+                    return (float) ($row->daily_spent_amount ?? $row->amount_spending ?? 0);
+                });
+
+                $todaySaved = $this->savingsCalculation->calculateDailySave(
+                    $perDayAllowedSpend,
+                    $perDaySaveTarget,
+                    $totalDailySpent
+                );
+                if ($todaySaved > $bestDaySaved) {
+                    $bestDaySaved = $todaySaved;
                 }
             }
-            return $bestMargin;
+
+            return $bestDaySaved;
         } catch (Exception $e) {
             Log::error('GoalService::bestDaySaving'.$e->getMessage());
             throw $e;

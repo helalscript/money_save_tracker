@@ -54,34 +54,24 @@ class SavingsCalculationService
     }
 
     /**
-     * Calculate "today's saved" for a check-in day using your simple rule:
+     * Calculate "today's saved" for a check-in day.
      *
-     * - per_day_allowed_spend = daily spending limit (e.g. 700 ÷ 7 = 100)
-     * - daily_spent_amount    = how much spent today (e.g. 50)
-     * - today_saved           = max(0, per_day_allowed_spend - daily_spent_amount)
+     * - per_day_allowed_spend = daily spending limit (e.g. (M - G) ÷ D)
+     * - per_day_save_target   = required average saving per day (e.g. G ÷ D)
+     * - daily_spent_amount    = how much spent today (all check-ins for that date)
      *
-     * So in your example:
-     * - today_saved = max(0, 100 - 50) = 50 saved
+     * Rule:
+     *   today_saved = per_day_save_target + (per_day_allowed_spend - daily_spent_amount)
      *
-     * Note: per_day_save_target (G ÷ D) is still used for guidance (how much
-     * you *should* save per day on average), but does not get added into
-     * the per-day saved amount. Progressive savings are:
-     *
-     *   total_saved = Σ(today_saved) over all check-in days
-     *   remaining   = goal_save - total_saved
-     *
-     * @param float $perDayAllowedSpend From goal (per_day_allowed_spend).
-     * @param float $dailySpentAmount   Total spent for that day.
-     * @return float Always >= 0.
+     * This means:
+     * - if daily spent amount is less than per day allowed spend: positive bonus → more save will be done.
+     * - if daily spent amount is more than per day allowed spend: bonus negative → minus value will be calculated, which will be subtracted from the previous saving.
      */
-    public function calculateDailySave(float $perDayAllowedSpend, float $dailySpentAmount): float
+    public function calculateDailySave(float $perDayAllowedSpend, float $perDaySaveTarget, float $dailySpentAmount): float
     {
-        if ($dailySpentAmount >= $perDayAllowedSpend) {
-            // Spent at or over the daily limit → no savings for that day.
-            return 0.0;
-        }
+        $bonus = $perDayAllowedSpend - $dailySpentAmount;
 
-        return round($perDayAllowedSpend - $dailySpentAmount, 2);
+        return round($perDaySaveTarget + $bonus, 2);
     }
 
     /**
@@ -100,6 +90,7 @@ class SavingsCalculationService
         $derived = $this->getGoalDerived($goal);
         $goalSave = $derived['goal_save'];
         $perDayAllowedSpend = $derived['per_day_allowed_spend'];
+        $perDaySaveTarget = $derived['per_day_save_target'];
         $checkIns = $goal->checkIns()->get();
 
         // Fallback for very old goals where daily limit is not defined.
@@ -135,8 +126,8 @@ class SavingsCalculationService
                     return (float) ($row->daily_spent_amount ?? $row->amount_spending ?? 0);
                 });
 
-                // today_saved = max(0, daily_limit - total_daily_spent)
-                $todaySaved = $this->calculateDailySave($perDayAllowedSpend, $totalDailySpent);
+                // today_saved = per_day_save_target + (daily_limit - total_daily_spent) if within limit; else 0
+                $todaySaved = $this->calculateDailySave($perDayAllowedSpend, $perDaySaveTarget, $totalDailySpent);
                 $totalSaved += $todaySaved;
             }
         }
