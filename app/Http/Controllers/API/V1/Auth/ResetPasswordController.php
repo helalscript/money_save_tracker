@@ -31,12 +31,12 @@ class ResetPasswordController extends Controller
         ]);
         try {
             $email = $request->input('email');
-            $otp = 1234;
-            // $otp = rand(1000, 9999);
+            // $otp = 1234;
+            $otp = rand(1000, 9999);
             $user = User::where('email', $email)->first();
 
             if ($user) {
-                // Mail::to($email)->send(new OtpMail($otp, $user, 'Reset Your Password')); // For testing purposes, you can comment this line. In production, uncomment it.
+                Mail::to($email)->send(new OtpMail($otp, $user, 'Reset Your Password')); // For testing purposes, you can comment this line. In production, uncomment it.
                 $user->update([
                     'otp' => $otp,
                     'otp_expires_at' => Carbon::now()->addMinutes(60),
