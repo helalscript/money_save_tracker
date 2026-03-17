@@ -52,10 +52,7 @@ class TipsService
     public function markAsDone($userTipId)
     {
         try {
-            $userTip = UserTip::where('id', $userTipId)
-                ->where('user_id', $this->user->id)
-                ->firstOrFail();
-
+            $userTip = Tip::find($userTipId);
             $userTip->update([
                 'status' => 'done',
             ]);

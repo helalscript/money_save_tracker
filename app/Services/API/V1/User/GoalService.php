@@ -2,6 +2,7 @@
 
 namespace App\Services\API\V1\User;
 
+use App\Services\AI\OpenAIService;
 use App\Models\Goal;
 use Carbon\Carbon;
 use DB;
@@ -13,9 +14,31 @@ class GoalService
 {
     protected $user;
 
-    public function __construct(protected SavingsCalculationService $savingsCalculation)
+    public function __construct(
+        protected SavingsCalculationService $savingsCalculation,
+        protected OpenAIService $openAIService
+    )
     {
         $this->user = Auth::user();
+    }
+
+    /**
+     * Build a human-friendly suggestion based on pace vs required pace.
+     */
+    protected function buildAiSuggestion(array $ctx): string
+    {
+        return $this->openAIService->generateGoalSuggestion([
+            'saved_amount' => $ctx['total_saved'] ?? null,
+            'target_amount' => $ctx['target_saving'] ?? null,
+            'remaining_amount' => $ctx['remaining_saving'] ?? null,
+            'days_remaining' => $ctx['days_remaining'] ?? null,
+            'current_day' => $ctx['current_day'] ?? null,
+            'total_days' => $ctx['total_days'] ?? null,
+            'expected_saving_by_today' => $ctx['expected_saving_by_today'] ?? null,
+            'deadline_indicator' => $ctx['deadline_indicator'] ?? null,
+            // Cache-bust token so suggestion refreshes immediately when data changes.
+            'cache_bust' => $ctx['cache_bust'] ?? null,
+        ]);
     }
 
     /**
@@ -219,15 +242,35 @@ class GoalService
         $currentDay = (int) min($totalDays, max(1, $daysElapsed));
         $daysRemaining = max(0, $totalDays - $daysElapsed);
 
+        // Used to refresh cached AI text immediately when goal/check-ins change.
+        $goalUpdatedAt = $goal->updated_at ? Carbon::parse($goal->updated_at)->timestamp : null;
+        $lastCheckInUpdatedAt = null;
+        if ($goal->relationLoaded('checkIns') && $goal->checkIns) {
+            $lastCheckInUpdatedAt = $goal->checkIns->max(function ($c) {
+                $t = $c->updated_at ?? $c->created_at ?? null;
+                return $t ? Carbon::parse($t)->timestamp : null;
+            });
+        }
+        $cacheBust = implode('|', [
+            'goal_id='.$goal->id,
+            'goal_updated_at='.$goalUpdatedAt,
+            'last_checkin_updated_at='.$lastCheckInUpdatedAt,
+        ]);
+
         // Expected saving by today = (target_saving / total_days) × current_day.
         $expectedSavingByToday = $totalDays > 0 ? ($targetSaving / $totalDays) * $currentDay : 0;
 
-        // Status message: if total_saved >= expected_saving -> on track / early; else need to save more.
-        if ($totalSaved >= $expectedSavingByToday) {
-            $statusMessage = "At your pace, you'll reach your goal early";
-        } else {
-            $statusMessage = 'You need to save more per day to reach your goal';
-        }
+        $aiSuggestion = $this->buildAiSuggestion([
+            'total_saved' => $totalSaved,
+            'target_saving' => $targetSaving,
+            'remaining_saving' => $remainingSaving,
+            'current_day' => $currentDay,
+            'total_days' => $totalDays,
+            'days_remaining' => $daysRemaining,
+            'expected_saving_by_today' => $expectedSavingByToday,
+            'deadline_indicator' => $goal->deadline_indicator ?? null,
+            'cache_bust' => $cacheBust,
+        ]);
 
         // Deadline indicator: green = on track, yellow = slightly behind, red = falling behind.
         $ratio = $expectedSavingByToday > 0 ? $totalSaved / $expectedSavingByToday : 1.0;
@@ -248,7 +291,8 @@ class GoalService
             'daily_target' => $dailyTargetFormatted,
             'deadline_indicator' => $goal->deadline_indicator ?? 'green',
             'persantage_progress' => $progressFormatted,
-            'status_message' => $statusMessage,
+            'ai_suggestion' => $aiSuggestion,
+            'status_message' => $aiSuggestion,
             'expected_saving_by_today' => $expectedSavingByToday,
             'current_day' => $currentDay,
             'total_days' => $totalDays,

@@ -27,17 +27,17 @@ class PackageSeeder extends Seeder
             'status' => 'active',
         ]); 
 
-        $premiumPackage = Package::create([
-            'title' => 'MoneyCoach Premium',
-            'price_weekly' => null,
-            'price_monthly' => 29.99,
-            'price_yearly' => null,
-            'price_offer' => null,
-            'free_trail_day' => 7,
-            'description' => 'Get the full power of AI-driven financial coaching.',
-            'image' => 'uploads/packages/premium-package.png',
-            'status' => 'active',
-        ]);
+        // $premiumPackage = Package::create([
+        //     'title' => 'MoneyCoach Premium',
+        //     'price_weekly' => null,
+        //     'price_monthly' => 29.99,
+        //     'price_yearly' => null,
+        //     'price_offer' => null,
+        //     'free_trail_day' => 7,
+        //     'description' => 'Get the full power of AI-driven financial coaching.',
+        //     'image' => 'uploads/packages/premium-package.png',
+        //     'status' => 'active',
+        // ]);
 
         // Get all features
         $features = Feature::all();
@@ -50,11 +50,11 @@ class PackageSeeder extends Seeder
                 'status' => 'active',
             ]);
 
-            $premiumPackage->features()->attach($feature->id, [
-                'description' => $feature->description,
-                'image' => null,
-                'status' => 'active',
-            ]);
+            // $premiumPackage->features()->attach($feature->id, [
+            //     'description' => $feature->description,
+            //     'image' => null,
+            //     'status' => 'active',
+            // ]);
         }
     }
 }
