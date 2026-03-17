@@ -61,10 +61,12 @@ class GoalService
             $endDate = Carbon::parse($validatedData['end_date']);
             $totalDays = $startDate->diffInDays($endDate) + 1;
 
-            // total_spend_allowed = monthly_income - target_amount (total money available for spending).
+            // monthly_income is a monthly rate; prorate it to this goal's period.
             $monthlyIncome = (float) ($validatedData['monthly_income'] ?? 0);
+            $periodMoney = $monthlyIncome * ($totalDays / 30);
             $amountToSave = (float) ($validatedData['target_amount'] ?? 0);
-            $validatedData['total_spend_allowed'] = round(max(0, $monthlyIncome - $amountToSave), 2);
+            // total_spend_allowed = period_money - target_amount (total money available for spending).
+            $validatedData['total_spend_allowed'] = round(max(0, $periodMoney - $amountToSave), 2);
             // daily_budget = total_spend_allowed / total_days; stored as daily_target (max spend per day).
             $validatedData['daily_target'] = $totalDays > 0 ? round($validatedData['total_spend_allowed'] / $totalDays, 2) : 0;
 
