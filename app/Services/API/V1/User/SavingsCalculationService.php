@@ -33,11 +33,16 @@ class SavingsCalculationService
      */
     public function getGoalDerived(Goal $goal): array
     {
-        $totalMoney = (float) ($goal->monthly_income ?? 0);
         $goalSave = (float) ($goal->target_amount ?? 0);
         $start = $goal->start_date ? \Carbon\Carbon::parse($goal->start_date)->startOfDay() : null;
         $end = $goal->end_date ? \Carbon\Carbon::parse($goal->end_date)->startOfDay() : null;
         $totalDays = ($start && $end) ? max(1, $start->diffInDays($end) + 1) : 1;
+
+        // Treat monthly_income as a monthly rate and prorate to the goal period.
+        // Example: monthly_income=10000, total_days=45 → total_money=10000*(45/30)=15000
+        $monthlyIncome = (float) ($goal->monthly_income ?? 0);
+        $totalMoney = $monthlyIncome * ($totalDays / 30);
+
         $totalSpendAllowed = max(0, $totalMoney - $goalSave);
         $perDayAllowedSpend = $totalDays > 0 ? ($totalSpendAllowed / $totalDays) : 0;
         // per_day_save_target = save_target / total_days (e.g., 300/7 = 42.86)
