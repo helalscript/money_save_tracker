@@ -35,8 +35,10 @@ class GoalResource extends JsonResource
             'remaining_amount' => number_format($this->others_data['remaining_amount'] ?? $this->others_data['remaining_saving'] ?? 0, 0),
             'deadline_indicator' => $this->deadline_indicator,
             'new_end_date' => $this->others_data['new_end_date'],
-            'ai_suggestion' => $this->others_data['status_message'] ?? ("At your pace. You'll reach your goal by " . Carbon::parse($this->others_data['new_end_date'])->format('M d')),
-            'status_message' => $this->others_data['status_message'] ?? null,
+            'ai_suggestion' => $this->others_data['ai_suggestion']
+                ?? $this->others_data['status_message']
+                ?? ("At your pace. You'll reach your goal by " . Carbon::parse($this->others_data['new_end_date'])->format('M d')),
+            'status_message' => $this->others_data['status_message'] ?? $this->others_data['ai_suggestion'] ?? null,
             'persantage_progress' => $this->others_data['persantage_progress'],
         ];
     }

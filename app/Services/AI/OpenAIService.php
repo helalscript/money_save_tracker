@@ -3,6 +3,7 @@
 namespace App\Services\AI;
 
 use Exception;
+use Illuminate\Support\Facades\Cache;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 
@@ -57,6 +58,23 @@ class OpenAIService
         return $insights;
     }
 
+    /**
+     * Generate a short goal pace suggestion (1 sentence).
+     *
+     * @param  array  $context
+     */
+    public function generateGoalSuggestion(array $context): string
+    {
+        $cacheKey = 'openai:goal_suggestion:'.sha1(json_encode($context));
+
+        return Cache::remember($cacheKey, now()->addHours(6), function () use ($context) {
+            $prompt = $this->buildGoalSuggestionPrompt($context);
+
+            // Keep it short for speed.
+            return $this->callChatModel($prompt, 60);
+        });
+    }
+
     protected function buildTipPrompt(array $context): string
     {
         $dailyLimit = $context['daily_limit'] ?? null;
@@ -106,6 +124,21 @@ class OpenAIService
         return implode(' ', $parts);
     }
 
+    protected function buildGoalSuggestionPrompt(array $context): string
+    {
+        $parts = [];
+        $parts[] = 'You are a friendly, non-judgmental money coach.';
+        $parts[] = 'Write ONE short sentence (max 18 words) as a goal progress suggestion.';
+        $parts[] = 'No bullet points, no quotes, no emojis, no disclaimers.';
+        $parts[] = 'If the user is on track or ahead, encourage them briefly.';
+        $parts[] = 'If behind, give one actionable step with a specific daily saving target if available.';
+
+        $json = json_encode($context);
+        $parts[] = 'JSON: '.$json;
+
+        return implode(' ', $parts);
+    }
+
     /**
      * Low-level OpenAI chat call.
      */
@@ -121,6 +154,8 @@ class OpenAIService
 
         try {
             $response = Http::withToken($apiKey)
+                ->timeout(8)
+                ->retry(1, 200)
                 ->post($baseUrl.'/chat/completions', [
                     'model' => 'gpt-4o-mini',
                     'messages' => [
@@ -134,7 +169,8 @@ class OpenAIService
                         ],
                     ],
                     'max_tokens' => $maxTokens,
-                    'temperature' => 0.7,
+                    // Lower temperature tends to be faster + more consistent.
+                    'temperature' => 0.4,
                 ]);
 
             if (! $response->successful()) {

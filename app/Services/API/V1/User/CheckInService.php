@@ -47,7 +47,7 @@ class CheckInService
 
             if (! $activeGoal) {
                 return [
-                    'today' => ['spent' => null, 'saved' => null],
+                    'today' => ['spent' => null, 'saved' => null, 'allowed_spend' => null],
                     'progress' => [
                         'total_saved' => 0,
                         'goal_save' => 0,
@@ -74,6 +74,7 @@ class CheckInService
             $derived = $this->savingsCalculation->getGoalDerived($activeGoal);
             $perDayAllowedSpend = $derived['per_day_allowed_spend'];
             $perDaySaveTarget = $derived['per_day_save_target'];
+            $payload['today']['allowed_spend'] = round((float) $perDayAllowedSpend, 2);
 
             // Today: if multiple check-ins on same day, sum all daily_spent_amount for that date.
             $todayCheckIns = CheckIn::where('goal_id', $activeGoal->id)
@@ -90,7 +91,8 @@ class CheckInService
                     $perDaySaveTarget,
                     $totalDailySpent
                 );
-                $payload['today'] = ['spent' => round($totalDailySpent, 2), 'saved' => $totalDailySave];
+                $payload['today']['spent'] = round($totalDailySpent, 2);
+                $payload['today']['saved'] = $totalDailySave;
             }
 
             $checkIns = CheckIn::where('goal_id', $activeGoal->id)
