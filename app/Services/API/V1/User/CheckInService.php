@@ -146,11 +146,41 @@ class CheckInService
             $payload['total_amount_saved'] = (int) round($payload['progress']['total_saved']);
             $payload['daily_target'] = (int) round($derived['per_day_allowed_spend']);
 
+            // Ensure all decimal values are formatted to 10,2 (2 decimal places) for API response.
+            $payload['today']['spent'] = $this->formatDecimal($payload['today']['spent']);
+            $payload['today']['saved'] = $this->formatDecimal($payload['today']['saved']);
+            $payload['today']['allowed_spend'] = $this->formatDecimal($payload['today']['allowed_spend']);
+
+            $payload['progress']['total_saved'] = $this->formatDecimal($payload['progress']['total_saved']);
+            $payload['progress']['goal_save'] = $this->formatDecimal($payload['progress']['goal_save']);
+            $payload['progress']['goal_completion_percent'] = $this->formatDecimal($payload['progress']['goal_completion_percent']);
+
+            $payload['guidance']['remaining_save'] = $this->formatDecimal($payload['guidance']['remaining_save']);
+            $payload['guidance']['next_day_required_save'] = $this->formatDecimal($payload['guidance']['next_day_required_save']);
+            $payload['guidance']['next_day_allowed_spend'] = $this->formatDecimal($payload['guidance']['next_day_allowed_spend']);
+
+            $payload['total_amount_spending'] = $this->formatDecimal($payload['total_amount_spending']);
+            $payload['total_amount_saved'] = $this->formatDecimal($payload['total_amount_saved']);
+            $payload['daily_target'] = $this->formatDecimal($payload['daily_target']);
+
             return $payload;
         } catch (Exception $e) {
             Log::error("CheckInService::index" . $e->getMessage());
             throw $e;
         }
+    }
+
+    /**
+     * Format any numeric value to a 10,2-style decimal (2 decimal places) for JSON responses.
+     * Returns null unchanged.
+     */
+    private function formatDecimal($value): ?string
+    {
+        if ($value === null) {
+            return null;
+        }
+
+        return number_format((float) $value, 2, '.', '');
     }
 
     /**
