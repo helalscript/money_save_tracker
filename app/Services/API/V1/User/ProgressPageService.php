@@ -61,10 +61,13 @@ class ProgressPageService
     {
         try {
             $goal = $this->goalService->getActiveGoal();
+            if (! $goal) {
+                return 'No active goal found yet. Start a goal to receive personalized AI insights.';
+            }
 
             $journey = $goal['others_data'] ?? [];
 
-            // Collect recent spending (last 14 days) for richer context.
+            // Collect recent spending from the last 14 days for better insight quality.
             $recentCheckIns = CheckIn::whereHas('goal', function ($query) {
                 $query->where('user_id', $this->user->id)
                     ->where('status', 'active');
@@ -93,7 +96,19 @@ class ProgressPageService
                 'recent_days' => $recentCheckIns,
             ];
 
-            return $this->openAIService->generateInsights($context);
+            $insights = $this->openAIService->generateInsights($context);
+
+            // Return plain text (not array/brackets) and clean minor punctuation artifacts.
+            $cleanedInsights = array_map(function ($insight) {
+                $text = trim((string) $insight);
+                $text = trim($text, "[]\"' \t\n\r\0\x0B");
+                $text = preg_replace('/\s+/', ' ', $text) ?? $text;
+
+                return $text;
+            }, $insights);
+            $cleanedInsights = array_filter($cleanedInsights, fn ($insight) => $insight !== '');
+
+            return implode(' ', $cleanedInsights);
         } catch (Exception $e) {
             Log::error("ProgressPageService::aiInsights" . $e->getMessage());
             throw $e;
