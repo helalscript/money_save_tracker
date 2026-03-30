@@ -75,8 +75,10 @@ class SavingsCalculationService
     public function calculateDailySave(float $perDayAllowedSpend, float $perDaySaveTarget, float $dailySpentAmount): float
     {
         $bonus = $perDayAllowedSpend - $dailySpentAmount;
+        $raw = $perDaySaveTarget + $bonus;
 
-        return round($perDaySaveTarget + $bonus, 2);
+        // Overspending cannot reduce the running total below zero for this day (matches getTracking doc intent).
+        return round(max(0.0, $raw), 2);
     }
 
     /**
