@@ -38,7 +38,7 @@ class OpenAIService
     public function generateInsights(array $context): array
     {
         $prompt = $this->buildInsightsPrompt($context);
-        $raw = $this->callChatModel($prompt, 160);
+        $raw = $this->callChatModel($prompt, 220);
 
         // Try to split into bullet-style lines if multiple insights are returned.
         $lines = preg_split('/\r\n|\r|\n/', trim($raw)) ?: [];
@@ -113,13 +113,14 @@ class OpenAIService
     protected function buildInsightsPrompt(array $context): string
     {
         $parts = [];
-        $parts[] = 'You are a friendly money coach summarizing a user’s recent spending.';
-        $parts[] = 'Based on the JSON data below, return 2–3 short bullet-style insights (each on a new line).';
-        $parts[] = 'Focus on: how close they are to their budget, patterns in days of the week, and simple behavior suggestions.';
-        $parts[] = 'Keep each insight under 1–2 sentences, plain language, no jargon.';
+        $parts[] = 'You are a friendly, supportive money coach.';
+        $parts[] = 'The user’s data is in the JSON below. When you mention any amount, percentage, or number of days, use ONLY values from that JSON—do not estimate or invent figures.';
+        $parts[] = 'Return 2–3 short lines of coaching. Put one insight per line. Use clear, grammatical English; no square brackets around the whole reply; no JSON in your answer.';
+        $parts[] = 'Tie advice to: save target, per_day_allowed_spend, totals from check-ins, and recent daily spend vs allowance when the data includes it. If there is no check-in today, say so gently.';
+        $parts[] = 'Plain language, no financial jargon, each line at most two sentences.';
 
-        $json = json_encode($context);
-        $parts[] = 'JSON: '.$json;
+        $json = json_encode($context, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $parts[] = 'User data (JSON): '.$json;
 
         return implode(' ', $parts);
     }
