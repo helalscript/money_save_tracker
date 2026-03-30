@@ -172,10 +172,15 @@ class ProgressPageService
                 // Same calendar day as end (or overdue): entire remainder applies to the remaining window.
                 $savePerDayToFinishOnTime = round($saveStillNeeded, 2);
             }
+            $maxSavePerDay = round(max(0.0, $perDayAllowed + $perDaySaveTarget), 2);
             $impliedSpendHeadroomAtThatSavePace = round(
-                max(0.0, $perDayAllowed - $savePerDayToFinishOnTime),
+                // dailySaved = max(0, perDaySaveTarget + (perDayAllowed - dailySpent))
+                // => to achieve equal-split save, dailySpent must be <= perDayAllowed + perDaySaveTarget - dailySaved
+                max(0.0, $perDayAllowed + $perDaySaveTarget - $savePerDayToFinishOnTime),
                 2
             );
+            $maxTotalSaveInRemainingWindow = round($maxSavePerDay * $calendarDaysUntilEnd, 2);
+            $canFinishExactly = $saveStillNeeded <= $maxTotalSaveInRemainingWindow;
 
             $context = [
                 'goal_id' => (int) $goal->id,
@@ -196,6 +201,9 @@ class ProgressPageService
                     'save_still_needed' => round($saveStillNeeded, 2),
                     'equal_split_save_per_day_to_finish_on_time' => $savePerDayToFinishOnTime,
                     'implied_daily_spending_headroom_at_that_save_pace' => $impliedSpendHeadroomAtThatSavePace,
+                    'max_possible_save_per_day' => $maxSavePerDay,
+                    'max_total_save_in_remaining_window' => $maxTotalSaveInRemainingWindow,
+                    'can_finish_exactly_by_goal_end' => $canFinishExactly,
                 ],
                 'budget_model_exact' => [
                     'per_day_allowed_spend' => round($perDayAllowed, 2),

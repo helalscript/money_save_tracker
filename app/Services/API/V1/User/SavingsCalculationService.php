@@ -164,6 +164,7 @@ class SavingsCalculationService
         $goalSave = $derived['goal_save'];
         $totalDays = $derived['total_days'];
         $perDayAllowedSpend = $derived['per_day_allowed_spend'];
+        $perDaySaveTarget = $derived['per_day_save_target'];
 
         $remainingDays = max(0, $totalDays - $daysPassed);
         $remainingSave = max(0, $goalSave - $totalSaved);
@@ -172,7 +173,13 @@ class SavingsCalculationService
         $nextDayAllowedSpend = null;
         if ($remainingDays > 0) {
             $nextDayRequiredSave = round($remainingSave / $remainingDays, 2);
-            $nextDayAllowedSpend = round(max(0, $perDayAllowedSpend - $nextDayRequiredSave), 2);
+            // calculateDailySave(perDayAllowedSpend, perDaySaveTarget, dailySpent)
+            // = max(0, perDaySaveTarget + (perDayAllowedSpend - dailySpent))
+            // So: dailySpent <= perDayAllowedSpend + perDaySaveTarget - requiredDailySave
+            $nextDayAllowedSpend = round(
+                max(0, $perDayAllowedSpend + $perDaySaveTarget - $nextDayRequiredSave),
+                2
+            );
         }
 
         return [

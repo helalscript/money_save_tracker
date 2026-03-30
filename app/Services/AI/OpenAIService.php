@@ -116,7 +116,7 @@ class OpenAIService
         $parts[] = 'You are a friendly, supportive money coach.';
         $parts[] = 'The user’s data is in the JSON below. When you mention any amount, percentage, or number of days, use ONLY values from that JSON—do not estimate or invent figures.';
         $parts[] = 'Return 2–3 short lines of coaching. Put one insight per line. Use clear, grammatical English; no square brackets around the whole reply; no JSON in your answer.';
-        $parts[] = 'If you talk about how many days are left until the goal end date, use calendar_progress.calendar_days_until_end_date with deadline_aligned_math (equal_split_save_per_day_to_finish_on_time, implied_daily_spending_headroom_at_that_save_pace). Do NOT mix those with guidance_exact.next_day_suggested_save_amount unless both sections agree—guidance_exact is tied to check-in days.';
+        $parts[] = 'If you talk about how many days are left until the goal end date, use calendar_progress.calendar_days_until_end_date with deadline_aligned_math (equal_split_save_per_day_to_finish_on_time, implied_daily_spending_headroom_at_that_save_pace). If can_finish_exactly_by_goal_end is false, say it is not fully achievable and focus on maximizing (and mention max_possible_save_per_day / max_total_save_in_remaining_window when needed). Do NOT mix those with guidance_exact.next_day_suggested_save_amount unless both sections agree—guidance_exact is tied to check-in days.';
         $parts[] = 'Tie advice to: save target, per_day_allowed_spend, totals from check-ins, and recent daily spend vs allowance when the data includes it. If there is no check-in today, say so gently.';
         $parts[] = 'Plain language, no financial jargon, each line at most two sentences.';
 
