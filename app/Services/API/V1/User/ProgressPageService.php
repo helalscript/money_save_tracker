@@ -160,6 +160,23 @@ class ProgressPageService
 
             $sumLoggedSpending = (float) $goal->checkIns->sum($sumRowSpent);
 
+            // Calendar-based pace (matches goal card / end date). Do not mix with check-in-based guidance when talking about "days left".
+            $calendarDaysUntilEnd = max(0, (int) ($journey['needed_days'] ?? 0));
+            $saveStillNeeded = max(
+                0.0,
+                round((float) $derived['goal_save'] - (float) $tracking['total_saved'], 2)
+            );
+            if ($calendarDaysUntilEnd > 0) {
+                $savePerDayToFinishOnTime = round($saveStillNeeded / $calendarDaysUntilEnd, 2);
+            } else {
+                // Same calendar day as end (or overdue): entire remainder applies to the remaining window.
+                $savePerDayToFinishOnTime = round($saveStillNeeded, 2);
+            }
+            $impliedSpendHeadroomAtThatSavePace = round(
+                max(0.0, $perDayAllowed - $savePerDayToFinishOnTime),
+                2
+            );
+
             $context = [
                 'goal_id' => (int) $goal->id,
                 'current_streak_days' => (int) ($goal['current_streak'] ?? 0),
@@ -168,11 +185,17 @@ class ProgressPageService
                 'goal_period_calendar_days' => (int) $derived['total_days'],
                 'calendar_progress' => [
                     'day_index_in_period' => (int) ($journey['current_day'] ?? 1),
-                    'calendar_days_until_end_date' => (int) ($journey['needed_days'] ?? 0),
+                    'calendar_days_until_end_date' => $calendarDaysUntilEnd,
                     'linear_expected_saved_by_today' => round(
                         (float) ($journey['expected_saving_by_today'] ?? 0),
                         2
                     ),
+                ],
+                'deadline_aligned_math' => [
+                    'calendar_days_until_goal_end_date' => $calendarDaysUntilEnd,
+                    'save_still_needed' => round($saveStillNeeded, 2),
+                    'equal_split_save_per_day_to_finish_on_time' => $savePerDayToFinishOnTime,
+                    'implied_daily_spending_headroom_at_that_save_pace' => $impliedSpendHeadroomAtThatSavePace,
                 ],
                 'budget_model_exact' => [
                     'per_day_allowed_spend' => round($perDayAllowed, 2),
@@ -196,6 +219,7 @@ class ProgressPageService
                     'next_day_suggested_allowed_spend' => $guidance['next_day_allowed_spend'] !== null
                         ? round((float) $guidance['next_day_allowed_spend'], 2)
                         : null,
+                    'note' => 'These use unique check-in days, not the calendar countdown. For "days left until goal end" use deadline_aligned_math with calendar_progress.',
                 ],
                 'today' => [
                     'has_check_in' => $todayRows->isNotEmpty(),
