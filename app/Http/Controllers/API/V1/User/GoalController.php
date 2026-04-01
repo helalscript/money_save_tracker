@@ -26,10 +26,10 @@ class GoalController extends Controller
     {
         try {
             $goals = $this->goalService->index($request);
-            
+
             return Helper::jsonResponse(true, 'Goals fetched successfully', 200, $goals, true);
         } catch (Exception $e) {
-            Log::error('GoalController::index' . $e->getMessage());
+            Log::error('GoalController::index'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -49,18 +49,22 @@ class GoalController extends Controller
             // We no longer ask the user for goal type; keep it optional for backward compatibility.
             'goal_type' => 'nullable|string|in:save_money,paying_debt',
             // Amount user wants to save in the period; spendable = income_in_period - target_amount
-            'target_amount' => 'required|numeric|min:0',
+            'target_amount' => 'required|numeric|max:'.(float) $request->monthly_income.'|min:0',
             // 'start_date' => 'required|date|date_format:Y-m-d|before:end_date|after_or_equal:today',
             'end_date' => 'required|date|date_format:Y-m-d|after:today',
             // 'daily_target' => 'nullable|numeric|min:0',
             // 'status' => 'nullable|string|in:active,inactive,completed',
-        ]);
+        ],
+            [
+                'target_amount.max' => 'The target amount must be less than or equal to the monthly income.',
+            ]
+        );
         try {
             $goal = $this->goalService->store($validateData);
 
             return Helper::jsonResponse(true, 'Goal created successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::store' . $e->getMessage());
+            Log::error('GoalController::store'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -76,7 +80,7 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Goal fetched successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::show' . $e->getMessage());
+            Log::error('GoalController::show'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -105,7 +109,7 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Goal updated successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::update' . $e->getMessage());
+            Log::error('GoalController::update'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -118,9 +122,11 @@ class GoalController extends Controller
     {
         try {
             $goal = $this->goalService->destroy($id);
+
             return Helper::jsonResponse(true, 'Goal deleted successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::destroy' . $e->getMessage());
+            Log::error('GoalController::destroy'.$e->getMessage());
+
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
     }
@@ -132,11 +138,12 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Active Goal fetched successfully', 200, GoalResource::make($goal));
         } catch (Exception $e) {
-            Log::error('GoalController::getActiveGoal' . $e->getMessage());
+            Log::error('GoalController::getActiveGoal'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
     }
+
     public function getWeeklyStreakData()
     {
         try {
@@ -144,7 +151,7 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Weekly Streak Data fetched successfully', 200, $streakData);
         } catch (Exception $e) {
-            Log::error('GoalController::getWeeklyStreakData' . $e->getMessage());
+            Log::error('GoalController::getWeeklyStreakData'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
