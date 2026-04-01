@@ -511,7 +511,24 @@ class CheckInService
         // sort by date
         ksort($perDay);
 
-        return array_values($perDay);
+        return array_values(array_map(
+            fn (array $row) => $this->roundActivityStatsRow($row),
+            $perDay
+        ));
+    }
+
+    /**
+     * Round activity amounts to whole numbers for API (avoids float noise like 12.32782367).
+     */
+    private function roundActivityStatsRow(array $row): array
+    {
+        foreach (['amount_saved', 'amount_spending', 'amount_saved_target'] as $key) {
+            if (array_key_exists($key, $row)) {
+                $row[$key] = (int) round((float) $row[$key]);
+            }
+        }
+
+        return $row;
     }
 
     private function groupByDay($checkIns)
@@ -553,7 +570,10 @@ class CheckInService
         // sort by key
         ksort($weeklyData);
 
-        return array_values($weeklyData);
+        return array_values(array_map(
+            fn (array $row) => $this->roundActivityStatsRow($row),
+            $weeklyData
+        ));
     }
 
     private function groupByMonth($checkIns)
@@ -586,6 +606,9 @@ class CheckInService
 
         ksort($monthlyData);
 
-        return array_values($monthlyData);
+        return array_values(array_map(
+            fn (array $row) => $this->roundActivityStatsRow($row),
+            $monthlyData
+        ));
     }
 }
