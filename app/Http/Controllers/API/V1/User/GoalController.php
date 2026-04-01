@@ -49,14 +49,14 @@ class GoalController extends Controller
             // We no longer ask the user for goal type; keep it optional for backward compatibility.
             'goal_type' => 'nullable|string|in:save_money,paying_debt',
             // Amount user wants to save in the period; spendable = income_in_period - target_amount
-            'target_amount' => 'required|numeric|max:'.(float) $request->monthly_income.'|min:0',
+            'target_amount' => 'required|numeric|max:'.((float) $request->monthly_income - 1).'|min:0',
             // 'start_date' => 'required|date|date_format:Y-m-d|before:end_date|after_or_equal:today',
             'end_date' => 'required|date|date_format:Y-m-d|after:today',
             // 'daily_target' => 'nullable|numeric|min:0',
             // 'status' => 'nullable|string|in:active,inactive,completed',
         ],
             [
-                'target_amount.max' => 'The target amount must be less than or equal to the monthly income.',
+                'target_amount.max' => 'The target savings amount must be less than the monthly income.',
             ]
         );
         try {
