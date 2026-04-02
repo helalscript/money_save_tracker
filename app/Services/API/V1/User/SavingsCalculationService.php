@@ -33,23 +33,39 @@ class SavingsCalculationService
      */
     public function getGoalDerived(Goal $goal): array
     {
-        $totalMoney = (float) ($goal->monthly_income ?? 0);
         $goalSave = (float) ($goal->target_amount ?? 0);
         $start = $goal->start_date ? \Carbon\Carbon::parse($goal->start_date)->startOfDay() : null;
         $end = $goal->end_date ? \Carbon\Carbon::parse($goal->end_date)->startOfDay() : null;
         $totalDays = ($start && $end) ? max(1, $start->diffInDays($end) + 1) : 1;
-        $totalSpendAllowed = max(0, $totalMoney - $goalSave);
-        $perDayAllowedSpend = $totalDays > 0 ? ($totalSpendAllowed / $totalDays) : 0;
+
+        // Treat monthly_income as a monthly rate and prorate to the goal period.
+        // Example: monthly_income=10000, total_days=45 → total_money=10000*(45/30)=15000
+        $monthlyIncome = (float) ($goal->monthly_income ?? 0);
+        $computedTotalMoney = $monthlyIncome * ($totalDays / 30);
+
+        $computedTotalSpendAllowed = max(0, $computedTotalMoney - $goalSave);
+        $computedPerDayAllowedSpend = $totalDays > 0 ? ($computedTotalSpendAllowed / $totalDays) : 0;
         // per_day_save_target = save_target / total_days (e.g., 300/7 = 42.86)
         $perDaySaveTarget = $totalDays > 0 ? ($goalSave / $totalDays) : 0;
 
+        // Prefer values persisted on the goal (set at creation) so Check-in math matches the goal record and UI.
+        if ($goal->daily_target !== null && $goal->total_spend_allowed !== null) {
+            $totalSpendAllowed = (float) $goal->total_spend_allowed;
+            $perDayAllowedSpend = (float) $goal->daily_target;
+            $totalMoney = $totalSpendAllowed + $goalSave;
+        } else {
+            $totalMoney = $computedTotalMoney;
+            $totalSpendAllowed = $computedTotalSpendAllowed;
+            $perDayAllowedSpend = $computedPerDayAllowedSpend;
+        }
+
         return [
-            'total_money' => $totalMoney,
+            'total_money' => round((float) $totalMoney, 2),
             'goal_save' => $goalSave,
             'total_days' => $totalDays,
-            'total_spend_allowed' => $totalSpendAllowed,
-            'per_day_allowed_spend' => round($perDayAllowedSpend, 2),
-            'per_day_save_target' => round($perDaySaveTarget, 2),
+            'total_spend_allowed' => round(max(0, (float) $totalSpendAllowed), 2),
+            'per_day_allowed_spend' => round(max(0, (float) $perDayAllowedSpend), 2),
+            'per_day_save_target' => round((float) $perDaySaveTarget, 2),
         ];
     }
 
@@ -70,8 +86,10 @@ class SavingsCalculationService
     public function calculateDailySave(float $perDayAllowedSpend, float $perDaySaveTarget, float $dailySpentAmount): float
     {
         $bonus = $perDayAllowedSpend - $dailySpentAmount;
+        $raw = $perDaySaveTarget + $bonus;
 
-        return round($perDaySaveTarget + $bonus, 2);
+        // Overspending cannot reduce the running total below zero for this day (matches getTracking doc intent).
+        return round(max(0.0, $raw), 2);
     }
 
     /**
@@ -157,6 +175,7 @@ class SavingsCalculationService
         $goalSave = $derived['goal_save'];
         $totalDays = $derived['total_days'];
         $perDayAllowedSpend = $derived['per_day_allowed_spend'];
+        $perDaySaveTarget = $derived['per_day_save_target'];
 
         $remainingDays = max(0, $totalDays - $daysPassed);
         $remainingSave = max(0, $goalSave - $totalSaved);
@@ -165,7 +184,13 @@ class SavingsCalculationService
         $nextDayAllowedSpend = null;
         if ($remainingDays > 0) {
             $nextDayRequiredSave = round($remainingSave / $remainingDays, 2);
-            $nextDayAllowedSpend = round(max(0, $perDayAllowedSpend - $nextDayRequiredSave), 2);
+            // calculateDailySave(perDayAllowedSpend, perDaySaveTarget, dailySpent)
+            // = max(0, perDaySaveTarget + (perDayAllowedSpend - dailySpent))
+            // So: dailySpent <= perDayAllowedSpend + perDaySaveTarget - requiredDailySave
+            $nextDayAllowedSpend = round(
+                max(0, $perDayAllowedSpend + $perDaySaveTarget - $nextDayRequiredSave),
+                2
+            );
         }
 
         return [

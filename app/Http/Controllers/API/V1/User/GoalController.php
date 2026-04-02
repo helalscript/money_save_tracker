@@ -6,6 +6,7 @@ use App\Helpers\Helper;
 use App\Http\Controllers\Controller;
 use App\Http\Resources\API\V1\GoalResource;
 use App\Services\API\V1\User\GoalService;
+use Carbon\Carbon;
 use Exception;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
@@ -26,10 +27,10 @@ class GoalController extends Controller
     {
         try {
             $goals = $this->goalService->index($request);
-            
+
             return Helper::jsonResponse(true, 'Goals fetched successfully', 200, $goals, true);
         } catch (Exception $e) {
-            Log::error('GoalController::index' . $e->getMessage());
+            Log::error('GoalController::index'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -40,6 +41,7 @@ class GoalController extends Controller
      */
     public function store(Request $request)
     {
+        // Must match GoalService / SavingsCalculationService: period income = monthly_income × (goal_days ÷ 30).
         $validateData = $request->validate([
             // New simplified onboarding: income (required), total budget, end date.
             'monthly_income' => 'required|numeric|min:0',
@@ -48,8 +50,29 @@ class GoalController extends Controller
             'debt_blance' => 'nullable|numeric|min:0',
             // We no longer ask the user for goal type; keep it optional for backward compatibility.
             'goal_type' => 'nullable|string|in:save_money,paying_debt',
-            // Amount user wants to save in the period; spendable = income_in_period - target_amount
-            'target_amount' => 'required|numeric|min:0',
+            // Save target cannot exceed prorated income for this goal length (same as backend budgets).
+            'target_amount' => [
+                'required',
+                'numeric',
+                'min:0',
+                function (string $attribute, mixed $value, \Closure $fail) use ($request) {
+                    try {
+                        $end = Carbon::parse($request->input('end_date'))->startOfDay();
+                    } catch (\Exception $e) {
+                        return;
+                    }
+                    $start = Carbon::today()->startOfDay();
+                    $totalDays = max(1, $start->diffInDays($end) + 1);
+                    $periodIncome = round((float) $request->input('monthly_income', 0) * ($totalDays / 30), 2);
+                    if ((float) $value > $periodIncome + 0.01) {
+                        $fail(sprintf(
+                            'Save target cannot exceed income for this goal period (%s). Monthly income is prorated: monthly income × %d days ÷ 30.',
+                            number_format($periodIncome, 2, '.', ''),
+                            $totalDays
+                        ));
+                    }
+                },
+            ],
             // 'start_date' => 'required|date|date_format:Y-m-d|before:end_date|after_or_equal:today',
             'end_date' => 'required|date|date_format:Y-m-d|after:today',
             // 'daily_target' => 'nullable|numeric|min:0',
@@ -60,7 +83,7 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Goal created successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::store' . $e->getMessage());
+            Log::error('GoalController::store'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -76,7 +99,7 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Goal fetched successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::show' . $e->getMessage());
+            Log::error('GoalController::show'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -105,7 +128,7 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Goal updated successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::update' . $e->getMessage());
+            Log::error('GoalController::update'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
@@ -118,9 +141,11 @@ class GoalController extends Controller
     {
         try {
             $goal = $this->goalService->destroy($id);
+
             return Helper::jsonResponse(true, 'Goal deleted successfully', 200, $goal);
         } catch (Exception $e) {
-            Log::error('GoalController::destroy' . $e->getMessage());
+            Log::error('GoalController::destroy'.$e->getMessage());
+
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
     }
@@ -132,11 +157,12 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Active Goal fetched successfully', 200, GoalResource::make($goal));
         } catch (Exception $e) {
-            Log::error('GoalController::getActiveGoal' . $e->getMessage());
+            Log::error('GoalController::getActiveGoal'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }
     }
+
     public function getWeeklyStreakData()
     {
         try {
@@ -144,7 +170,7 @@ class GoalController extends Controller
 
             return Helper::jsonResponse(true, 'Weekly Streak Data fetched successfully', 200, $streakData);
         } catch (Exception $e) {
-            Log::error('GoalController::getWeeklyStreakData' . $e->getMessage());
+            Log::error('GoalController::getWeeklyStreakData'.$e->getMessage());
 
             return Helper::jsonErrorResponse($e->getMessage(), 500);
         }

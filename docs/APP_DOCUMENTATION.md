@@ -106,7 +106,7 @@ All user features live inside `Route::group(['middleware' => ['auth:api', 'is_us
 - **Model:** `App\Models\Goal`
 - Important fields:
   - `user_id`, `monthly_income`, `target_amount` (savings target), `start_date`, `end_date`
-  - `daily_target` = **(monthly_income - target_amount) / total_days** (daily max spend / daily budget)
+  - `daily_target` = **((monthly_income × (total_days/30)) - target_amount) / total_days** (daily max spend / daily budget)
   - `current_streak`, `deadline_indicator` (green/yellow/red), `status` (active/inactive)
 
 ### 5.2 Check-ins table (`check_ins`)
@@ -131,7 +131,7 @@ This is the core business logic of the app; most of it lives in **GoalService** 
 
 - `start_date` = today, `end_date` = user-provided date.
 - `total_days` = number of days from start to end.
-- **daily_target** = (monthly_income - target_amount) / total_days  
+- **daily_target** = ((monthly_income × (total_days/30)) - target_amount) / total_days  
   → This is “daily budget” (max spend per day).
 
 ### 6.2 When a check-in is saved (CheckInService::store)

@@ -9,7 +9,9 @@
 
 ## Goal setup (derived once)
 
-- `total_money` (M) = goal’s `monthly_income` for the period  
+- `total_money` (M) = goal’s monthly income prorated to the goal period  
+  - \(M = monthly\_income \times (total\_days / 30)\)  
+  - Example: monthly_income = 10000, total_days = 45 → M = 15000  
 - `goal_save` (G) = goal’s `target_amount`  
 - `total_days` (D) = from `start_date` to `end_date`  
 - `total_spend_allowed` = M - G  
