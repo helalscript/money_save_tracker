@@ -163,6 +163,22 @@ class CheckInService
             $payload['total_amount_saved'] = $this->formatDecimal($payload['total_amount_saved']);
             $payload['daily_target'] = $this->formatDecimal($payload['daily_target']);
 
+            // Explain why allowed_spend can be 0: income is prorated as monthly_income × (goal_days / 30).
+            $periodIncome = (float) $derived['total_money'];
+            $periodSpendBudget = (float) $derived['total_spend_allowed'];
+            $payload['budget_context'] = [
+                'goal_period_days' => (int) $derived['total_days'],
+                'period_prorated_income' => $this->formatDecimal($periodIncome),
+                'save_target_total' => $this->formatDecimal((float) $derived['goal_save']),
+                'period_total_spend_allowed' => $this->formatDecimal($periodSpendBudget),
+                'per_day_allowed_spend' => $this->formatDecimal((float) $derived['per_day_allowed_spend']),
+                'per_day_save_target' => $this->formatDecimal((float) $derived['per_day_save_target']),
+                'daily_allowance_is_zero' => ((float) $derived['per_day_allowed_spend']) <= 0,
+                'hint' => $periodIncome < (float) $derived['goal_save']
+                    ? 'Income for this goal period (monthly income × days ÷ 30) is less than your save target, so there is no separate spending budget—daily allowed spend is 0. Raise monthly income, lower the save target, or add more days to the goal.'
+                    : null,
+            ];
+
             return $payload;
         } catch (Exception $e) {
             Log::error("CheckInService::index" . $e->getMessage());
@@ -331,7 +347,7 @@ class CheckInService
                     ->sum('daily_spent_amount');
                 $totalDailySpent = $existingDailySpent + (float) $dailySpent;
 
-                // আজকে বেঁচেছে = per_day_save_target + (daily_limit - total_daily_spent) if within limit; else 0
+                // today_saved = per_day_save_target + (daily_limit - total_daily_spent) if within limit; else 0
                 $validatedData['calculated_daily_save'] = $this->savingsCalculation->calculateDailySave(
                     $perDayAllowedSpend,
                     $perDaySaveTarget,
@@ -388,9 +404,12 @@ class CheckInService
             $checkIns = CheckIn::whereHas('goal', function ($query) {
                 $query->where('user_id', $this->user->id);
             })
-                ->with(['goal'])
-                ->orderBy('check_date', 'desc')
-                ->get();
+            ->whereHas('goal', function ($query) {
+                $query->where('status', 'active');
+            })
+            ->with(['goal'])
+            ->orderBy('check_date', 'desc')
+            ->get();
 
             // Group the data based on the grouping type
             $groupedData = $this->groupCheckIns($checkIns, $groupBy);

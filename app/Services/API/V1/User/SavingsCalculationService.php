@@ -41,20 +41,31 @@ class SavingsCalculationService
         // Treat monthly_income as a monthly rate and prorate to the goal period.
         // Example: monthly_income=10000, total_days=45 → total_money=10000*(45/30)=15000
         $monthlyIncome = (float) ($goal->monthly_income ?? 0);
-        $totalMoney = $monthlyIncome * ($totalDays / 30);
+        $computedTotalMoney = $monthlyIncome * ($totalDays / 30);
 
-        $totalSpendAllowed = max(0, $totalMoney - $goalSave);
-        $perDayAllowedSpend = $totalDays > 0 ? ($totalSpendAllowed / $totalDays) : 0;
+        $computedTotalSpendAllowed = max(0, $computedTotalMoney - $goalSave);
+        $computedPerDayAllowedSpend = $totalDays > 0 ? ($computedTotalSpendAllowed / $totalDays) : 0;
         // per_day_save_target = save_target / total_days (e.g., 300/7 = 42.86)
         $perDaySaveTarget = $totalDays > 0 ? ($goalSave / $totalDays) : 0;
 
+        // Prefer values persisted on the goal (set at creation) so Check-in math matches the goal record and UI.
+        if ($goal->daily_target !== null && $goal->total_spend_allowed !== null) {
+            $totalSpendAllowed = (float) $goal->total_spend_allowed;
+            $perDayAllowedSpend = (float) $goal->daily_target;
+            $totalMoney = $totalSpendAllowed + $goalSave;
+        } else {
+            $totalMoney = $computedTotalMoney;
+            $totalSpendAllowed = $computedTotalSpendAllowed;
+            $perDayAllowedSpend = $computedPerDayAllowedSpend;
+        }
+
         return [
-            'total_money' => $totalMoney,
+            'total_money' => round((float) $totalMoney, 2),
             'goal_save' => $goalSave,
             'total_days' => $totalDays,
-            'total_spend_allowed' => $totalSpendAllowed,
-            'per_day_allowed_spend' => round($perDayAllowedSpend, 2),
-            'per_day_save_target' => round($perDaySaveTarget, 2),
+            'total_spend_allowed' => round(max(0, (float) $totalSpendAllowed), 2),
+            'per_day_allowed_spend' => round(max(0, (float) $perDayAllowedSpend), 2),
+            'per_day_save_target' => round((float) $perDaySaveTarget, 2),
         ];
     }
 
