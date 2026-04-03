@@ -45,6 +45,8 @@ Route::group(['middleware' => 'auth:api'], function ($router) {
     Route::get('/me', [UserController::class, 'me']);
     Route::post('/update-profile', [UserController::class, 'updateProfile']);
     Route::post('/update-password', [UserController::class, 'changePassword']);
+    Route::delete('/delete-profile', [UserController::class, 'deleteProfile']);
+
 });
 
 // this is for user
