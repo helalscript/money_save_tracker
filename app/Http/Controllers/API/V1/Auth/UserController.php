@@ -128,9 +128,16 @@ class UserController extends Controller
                     Helper::fileDelete($avatarPath);
                 }
             }
-
-            // Soft delete the user (if using SoftDeletes)
-            $user->delete();
+            //here we replace user email and pull null also 
+            $user->email = $user->email . '_' . time();
+            $user->phone = $user->phone . '_' . time();
+            $user->user_name = $user->user_name . '_' . time();
+            $user->status = 'inactive';
+            $user->save();
+            //also login out the user
+            Auth::logout();
+            // // Soft delete the user (if using SoftDeletes)
+            // $user->delete();
 
             // Return success response
             return Helper::jsonResponse(true, 'Profile deleted successfully', 200);
